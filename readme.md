@@ -1,0 +1,1 @@
+ghc -fno-code -fforce-recomp -ddump-types Test2.hs
