@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Slice where
 import RIO
+import Namable
 import Language.Haskell.Exts.Parser
 import Language.Haskell.Exts.Pretty
 import Language.Haskell.Exts.SrcLoc
@@ -43,7 +44,3 @@ main = runSimpleApp $ do
       runRIO (Slices logFunc []) (getSlices hModule)
     ParseFailed srcLoc message ->
       logInfo "Parsing Failed"
-
-  -- logInfo "Hello"
-  -- runRIO 
-

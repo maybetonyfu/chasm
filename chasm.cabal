@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d0a959eaed33a0b8f98b862ef6c3e35a38c8e788bf358edc005d010343378b2d
+-- hash: 302b2f205ee395d6bad6931c8b67db047bcde18a111010df657c3496eb98b99f
 
 name:           chasm
 version:        0.1.0.0
@@ -22,26 +22,12 @@ source-repository head
 
 library
   exposed-modules:
+      Namable
       Slice
   other-modules:
       Paths_chasm
   hs-source-dirs:
       src
-  default-extensions:
-      FlexibleContexts
-      FlexibleInstances
-      OverloadedStrings
-      PartialTypeSignatures
-      PatternGuards
-      PolyKinds
-      QuasiQuotes
-      RankNTypes
-      RecordWildCards
-      ScopedTypeVariables
-      StandaloneDeriving
-      TemplateHaskell
-      TupleSections
-      NoImplicitPrelude
   build-depends:
       base
     , haskell-src-exts
@@ -54,21 +40,6 @@ executable chasm
       Paths_chasm
   hs-source-dirs:
       app
-  default-extensions:
-      FlexibleContexts
-      FlexibleInstances
-      OverloadedStrings
-      PartialTypeSignatures
-      PatternGuards
-      PolyKinds
-      QuasiQuotes
-      RankNTypes
-      RecordWildCards
-      ScopedTypeVariables
-      StandaloneDeriving
-      TemplateHaskell
-      TupleSections
-      NoImplicitPrelude
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base
