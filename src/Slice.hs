@@ -1,62 +1,49 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Slice where
 import RIO
-import RIO.State
 import Language.Haskell.Exts.Parser
 import Language.Haskell.Exts.Pretty
 import Language.Haskell.Exts.SrcLoc
 import Language.Haskell.Exts.Syntax
 
-
-data ScopeType
-  = VarScope
-  | FunScope
-  | ArgScope
-  | LambdaScope
-  | PatternScope
-  | CaseScope
-  | LetScope
-  | GeneratorScope
-  | AdtScope
-  | RecordFieldScope
-  | TypeScope
-  | OperatorScope
-  | TypeSigScope
-  deriving (Show, Eq)
-
-data Range = Normal SrcSpan | Global deriving (Show, Eq)
-
-data Slice = Slice {
-  moduleName :: String,
-  moduleAlias :: String,
-  sliceId :: Int,
-  scope :: Range,
-  scopeType:: ScopeType
+data Slices = Slices {
+  logFun :: LogFunc,
+  slices :: [(Maybe SrcSpan, [String])]
 }
 
-getId :: HasLogFunc m => RIO m (State Int Int)
-getId = do return (do 
-    n <- get
-    return n)
-  
-
+instance HasLogFunc Slices where
+  logFuncL = lens logFun (\x y -> x {logFun = y })
 
 sp :: SrcSpanInfo -> SrcSpan
 sp = srcInfoSpan
 
-class HasSlices f where
-  getSlices :: f SrcSpanInfo -> StateT Int IO [Slice]
+class HasSlice f where
+  getSlices :: f SrcSpanInfo -> RIO Slices ()
 
-instance HasSlices Module where
-  getSlices  (Module _ _ _ _ decls) = return []
+instance HasSlice Module where
+  getSlices  (Module _ _ _ _ decls) = do
+    logInfo "Module"
   getSlices _ = error "Not a module"
 
--- instance HasSlices Decl where
---   getSlices (PatBind srcspan pat rhs maybeWheres) = do
---     let scope = parent
---         names = patternVarNames pat
---         bindings = setMapFromList (Binding parent VarScope) names
---         rhsBindings = getSlices (Normal . sp $ srcspan) rhs
---         wherebinds = case maybeWheres of
---           Nothing -> []
---           Just wheres -> getSlices (Normal . sp $ srcspan) wheres
---     return bindings ++ wherebinds ++ rhsBindings
+instance HasSlice Decl where
+   getSlices (PatBind srcspan pat rhs maybeWheres) = do
+     logInfo "Hello"
+
+
+main :: IO ()
+main = runSimpleApp $ do
+  logFunc <- view logFuncL
+  let contents = "module X where"
+  let pResult = parseModuleWithMode parseMode contents
+      parseMode = defaultParseMode {parseFilename = "MyFile"}
+  case pResult of
+    ParseOk hModule -> do
+      logInfo "OK"
+      runRIO (Slices logFunc []) (getSlices hModule)
+    ParseFailed srcLoc message ->
+      logInfo "Parsing Failed"
+
+  -- logInfo "Hello"
+  -- runRIO 
+

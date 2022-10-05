@@ -1,6 +1,6 @@
 name:                chasm
 version:             0.1.0.0
-github:              "maybetonyfu/chameleon"
+github:              "maybetonyfu/chasm"
 license:             BSD3
 author:              "Tony Fu"
 maintainer:          "tonyfu@fastmail.com"
@@ -9,51 +9,10 @@ copyright:           "2023 Tony Fu"
 dependencies:
 - base
 - rio
-- yesod
 - haskell-src-exts
 
 library:
   source-dirs: src
-  default-extensions:
-    - BangPatterns
-    - BinaryLiterals
-    - ConstraintKinds
-    - DataKinds
-    - DefaultSignatures
-    - DeriveDataTypeable
-    - DeriveFoldable
-    - DeriveFunctor
-    - DeriveGeneric
-    - DeriveTraversable
-    - DoAndIfThenElse
-    - EmptyDataDecls
-    - ExistentialQuantification
-    - FlexibleContexts
-    - FlexibleInstances
-    - FunctionalDependencies
-    - GADTs
-    - GeneralizedNewtypeDeriving
-    - InstanceSigs
-    - KindSignatures
-    - LambdaCase
-    - MultiParamTypeClasses
-    - MultiWayIf
-    - NamedFieldPuns
-    - NoImplicitPrelude
-    - OverloadedStrings
-    - PartialTypeSignatures
-    - PatternGuards
-    - PolyKinds
-    - QuasiQuotes
-    - RankNTypes
-    - RecordWildCards
-    - ScopedTypeVariables
-    - StandaloneDeriving
-    - TemplateHaskell
-    - TupleSections
-    - TypeFamilies
-    - TypeSynonymInstances
-    - ViewPatterns
 
 
 executables:
@@ -66,43 +25,3 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - chasm
-    default-extensions:
-    - BangPatterns
-    - BinaryLiterals
-    - ConstraintKinds
-    - DataKinds
-    - DefaultSignatures
-    - DeriveDataTypeable
-    - DeriveFoldable
-    - DeriveFunctor
-    - DeriveGeneric
-    - DeriveTraversable
-    - DoAndIfThenElse
-    - EmptyDataDecls
-    - ExistentialQuantification
-    - FlexibleContexts
-    - FlexibleInstances
-    - FunctionalDependencies
-    - GADTs
-    - GeneralizedNewtypeDeriving
-    - InstanceSigs
-    - KindSignatures
-    - LambdaCase
-    - MultiParamTypeClasses
-    - MultiWayIf
-    - NamedFieldPuns
-    - NoImplicitPrelude
-    - OverloadedStrings
-    - PartialTypeSignatures
-    - PatternGuards
-    - PolyKinds
-    - QuasiQuotes
-    - RankNTypes
-    - RecordWildCards
-    - ScopedTypeVariables
-    - StandaloneDeriving
-    - TemplateHaskell
-    - TupleSections
-    - TypeFamilies
-    - TypeSynonymInstances
-    - ViewPatterns
