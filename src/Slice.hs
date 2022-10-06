@@ -36,10 +36,8 @@ instance HasSlice Decl where
   getSlices :: Decl SrcSpanInfo -> RIO Slices ()
   getSlices (PatBind srcspan pat rhs maybeWheres) = do
     logInfo "Hello"
-    let names = getNames pat
-    let span = sp srcspan
     s <- ask
-    modifyIORef (slices s) (++ [(Just span, names)])
+    modifyIORef (slices s) (++ [(Just (sp srcspan), getNames pat)])
     -- return ()
 
 main :: IO ()
