@@ -1,3 +1,4 @@
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
@@ -12,10 +13,11 @@ import RIO
 
 data Slices = Slices
   { logFun :: LogFunc,
-    slices :: [(Maybe SrcSpan, [String])]
+    slices :: IORef [(Maybe SrcSpan, [String])]
   }
 
 instance HasLogFunc Slices where
+  logFuncL :: Lens' Slices LogFunc
   logFuncL = lens logFun (\x y -> x {logFun = y})
 
 sp :: SrcSpanInfo -> SrcSpan
@@ -25,11 +27,13 @@ class HasSlice f where
   getSlices :: f SrcSpanInfo -> RIO Slices ()
 
 instance HasSlice Module where
+  getSlices :: Module SrcSpanInfo -> RIO Slices ()
   getSlices (Module _ _ _ _ decls) = do
     logInfo "Module"
   getSlices _ = error "Not a module"
 
 instance HasSlice Decl where
+  getSlices :: Decl SrcSpanInfo -> RIO Slices ()
   getSlices (PatBind srcspan pat rhs maybeWheres) = do
     logInfo "Hello"
     let names = getNames pat
@@ -44,7 +48,8 @@ main = runSimpleApp $ do
   case pResult of
     ParseOk hModule -> do
       logInfo "OK"
-      x <- runRIO (Slices logFunc []) (getSlices hModule >> ask)
+      emptyList <- newIORef []
+      x <- runRIO (Slices logFunc emptyList) (getSlices hModule >> ask)
       return ()
     ParseFailed srcLoc message ->
       logInfo "Parsing Failed"
