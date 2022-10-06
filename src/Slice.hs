@@ -37,7 +37,10 @@ instance HasSlice Decl where
   getSlices (PatBind srcspan pat rhs maybeWheres) = do
     logInfo "Hello"
     let names = getNames pat
-    return ()
+    let span = sp srcspan
+    s <- ask
+    modifyIORef (slices s) (++ [(Just span, names)])
+    -- return ()
 
 main :: IO ()
 main = runSimpleApp $ do
