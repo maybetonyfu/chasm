@@ -11,7 +11,6 @@ import RIO
 
 class (Show a) => WithName a where
   getNames :: a -> [String]
-
 instance (Show a) => WithName (Name a) where
   getNames (Ident _ name) = [name]
   getNames (Symbol _ name) = [name]
@@ -35,7 +34,6 @@ instance (Show a) => WithName (Pat a) where
   getNames PLit {} = []
   getNames PWildCard {} = []
   getNames p = error $ "Node: " ++ show p
-
 -- patternVarNames :: Show a => Pat a -> [String]
 -- patternVarNames (PVar _ name) = [getName name]
 -- patternVarNames (PNPlusK _ name _) = [getName name]
