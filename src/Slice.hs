@@ -1,8 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module Slice where
 
+import Data.String.QQ
 import Language.Haskell.Exts.Parser
 import Language.Haskell.Exts.Pretty
 import Language.Haskell.Exts.SrcLoc
@@ -10,27 +12,20 @@ import Language.Haskell.Exts.Syntax
 import Namable
 import RIO
 import RIO.List
+import Range
 
-data Range = Global | Scoped SrcSpan deriving (Show)
-
-data Slices = Slices
+data SliceAssemble = SliceAssemble
   { logFun :: LogFunc,
     getSlices :: IORef [(Range, [String])]
   }
 
-instance HasLogFunc Slices where
+instance HasLogFunc SliceAssemble where
   logFuncL = lens logFun (\x y -> x {logFun = y})
 
-sc :: SrcSpanInfo -> Range
-sc = Scoped . srcInfoSpan
-
-global :: Range
-global = Global
-
 class HasSlice f where
-  makeSlices :: Range -> f SrcSpanInfo -> RIO Slices ()
+  makeSlices :: Range -> f SrcSpanInfo -> RIO SliceAssemble ()
 
-addSlices :: Range -> [String] -> RIO Slices ()
+addSlices :: Range -> [String] -> RIO SliceAssemble ()
 addSlices range names = do
   s <- ask
   modifyIORef (getSlices s) (++ [(range, names)])
@@ -76,6 +71,8 @@ instance HasSlice Exp where
   makeSlices p (Paren srcspan e) = makeSlices (sc srcspan) e
   makeSlices p (LeftSection srcspan e _) = makeSlices (sc srcspan) e
   makeSlices p (RightSection srcspan _ e) = makeSlices (sc srcspan) e
+  makeSlices p (Lit _ _) = return ()
+  makeSlices p (Var _ qname) = return ()
   makeSlices p node = error $ "Unsupported node type: " ++ show node
 
 instance HasSlice Binds where
@@ -91,20 +88,27 @@ instance HasSlice Alt where
 main :: IO ()
 main = runSimpleApp $ do
   logFunc <- view logFuncL
-  let contents = "x = 1"
+  let contents = testSample
   let pResult = parseModuleWithMode parseMode contents
       parseMode = defaultParseMode {parseFilename = "MyFile"}
   case pResult of
     ParseOk hModule -> do
       logInfo "OK"
       emptyList <- newIORef []
-      x <- runRIO (Slices logFunc emptyList) (makeSlices global hModule >> ask)
-      s <- readIORef (getSlices x)
+      sliceObj <- runRIO (SliceAssemble logFunc emptyList) (makeSlices global hModule >> ask)
+      slices <- readIORef (getSlices sliceObj)
       mapM_
         ( \(loc, symbols) -> do
-            logInfo (displayShow symbols)
-            logInfo (displayShow loc)
+            logInfo (displayShow symbols <> ": " <> displayShow loc)
         )
-        s
+        slices
     ParseFailed srcLoc message ->
       logInfo "Parsing Failed"
+
+testSample :: String
+testSample =
+  [s|
+x = y where y = 3
+y = z where z = 3
+u = let p = 4 in p
+|]

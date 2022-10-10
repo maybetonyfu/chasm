@@ -9,6 +9,7 @@ copyright:           "2023 Tony Fu"
 dependencies:
 - base
 - rio
+- string-qq
 - haskell-src-exts
 
 library:

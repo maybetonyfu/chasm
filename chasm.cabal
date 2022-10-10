@@ -3,8 +3,6 @@ cabal-version: 1.12
 -- This file has been generated from package.yaml by hpack version 0.35.0.
 --
 -- see: https://github.com/sol/hpack
---
--- hash: 302b2f205ee395d6bad6931c8b67db047bcde18a111010df657c3496eb98b99f
 
 name:           chasm
 version:        0.1.0.0
@@ -22,8 +20,12 @@ source-repository head
 
 library
   exposed-modules:
+      Mod
       Namable
+      Range
+      Samples
       Slice
+      Typing
   other-modules:
       Paths_chasm
   hs-source-dirs:
@@ -32,6 +34,7 @@ library
       base
     , haskell-src-exts
     , rio
+    , string-qq
   default-language: Haskell2010
 
 executable chasm
@@ -46,4 +49,5 @@ executable chasm
     , chasm
     , haskell-src-exts
     , rio
+    , string-qq
   default-language: Haskell2010
