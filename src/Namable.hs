@@ -20,16 +20,12 @@ instance (WithName a, Show a) => WithName [a] where
 
 instance (Show a) => WithName (Pat a) where
   getNames (PVar _ name) = getNames name
-  getNames (PNPlusK _ name _) = getNames name
   getNames (PInfixApp _ p1 _ p2) = getNames p1 ++ getNames p2
   getNames (PApp _ _ ps) = getNames ps
   getNames (PTuple _ _ ps) = getNames ps
-  getNames (PUnboxedSum _ _ _ p) = getNames p
   getNames (PList _ ps) = getNames ps
   getNames (PParen _ p) = getNames p
   getNames (PAsPat _ name p) = getNames name ++ getNames p
-  getNames (PIrrPat _ p) = getNames p
-  getNames (PatTypeSig _ p _) = getNames p
   getNames PLit {} = []
   getNames PWildCard {} = []
   getNames p = error $ "Node type not supported: " ++ show p

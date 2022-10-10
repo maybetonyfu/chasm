@@ -23,7 +23,6 @@ library
       Mod
       Namable
       Range
-      Samples
       Slice
       Typing
   other-modules:

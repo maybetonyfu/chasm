@@ -31,13 +31,15 @@ instance HasLogFunc ConstrAssemble where
 class HasTyping f where
   matchTerm :: Text -> f SrcSpanInfo -> RIO ConstrAssemble ()
 
+
 fresh :: RIO ConstrAssemble Text
 fresh = do
   s <- ask
   number <- readIORef (counter s)
   modifyIORef (counter s) (+ 1)
   return (textDisplay number)
--- a = 3
+
+
 eq :: Text -> Text -> Text
 eq a b =
   mconcat
@@ -57,19 +59,37 @@ app f args =
       ")"
     ]
 
+instance HasTyping Module where
+  matchTerm t (Module _ _ _ _ decls) = mapM_ (matchTerm t) decls
+  matchTerm _ _ = undefined
+
 instance HasTyping Decl where
   matchTerm t (PatBind srcspan pat rhs maybeWheres) = do
-    lhs <- fresh
-    rhs <- fresh
-    logInfo . display $ eq lhs rhs 
-
+    vl <- fresh
+    vr <- fresh
+    matchTerm vl pat
+    matchTerm vr rhs
+    logInfo . display $ eq vl vr
   -- matchTerm t (FunBind srcspan matches) = do
   --   mapM_ (makeSlices p) matches
   matchTerm t node = error ("Node type not support: " ++ show node)
 
-instance HasTyping Module where
-  matchTerm _ (Module _ _ _ _ decls) = return ()
-  matchTerm _ _ = undefined
+instance HasTyping Pat where
+  matchTerm t (PVar _ name) = do
+    logInfo (displayShow name)
+  matchTerm t (PInfixApp _ p1 op p2) = return ()
+  matchTerm t (PApp _ _ ps) = return ()
+  matchTerm t (PTuple _ _ ps) = return ()
+  matchTerm t (PList _ ps) = return ()
+  matchTerm t (PParen _ p) = return ()
+  matchTerm t (PAsPat _ name p) = return ()
+  matchTerm t PLit {} = return ()
+  matchTerm t PWildCard {} = return ()
+  matchTerm t node = error $ "Node type not supported: " ++ show node
+
+instance HasTyping Rhs where
+  matchTerm t (UnGuardedRhs srcspan exp) = return ()
+  matchTerm t node = error ("Node type not support: " ++ show node)
 
 instance HasTyping Exp where
   matchTerm term (InfixApp srcspan e1 op e2) = do
@@ -128,13 +148,16 @@ main = runSimpleApp $ do
   case pResult of
     ParseOk hModule -> do
       logInfo "OK"
+      ioList <- newIORef []
+      ioInteger <- newIORef 0
+      constrObj <- runRIO (ConstrAssemble logFunc ioList ioInteger) (matchTerm "" hModule >> ask)
+      return ()
     ParseFailed srcLoc message ->
       logInfo "Parsing Failed"
 
 testSample :: String
 testSample =
   [s|
-x = y where y = 3
-y = z where z = 3
-u = let p = 4 in p
+x = 3
+y = M.x
 |]

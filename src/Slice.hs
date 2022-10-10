@@ -13,11 +13,19 @@ import Namable
 import RIO
 import RIO.List
 import Range
+import Mod
 
 data SliceAssemble = SliceAssemble
   { logFun :: LogFunc,
     getSlices :: IORef [(Range, [String])]
   }
+
+data Slice = Slice {
+  getRange :: Range,
+  getSymbols :: [String],
+  getModuleName :: Text,
+  getSliceId :: Int
+  } deriving (Show)
 
 instance HasLogFunc SliceAssemble where
   logFuncL = lens logFun (\x y -> x {logFun = y})
@@ -85,6 +93,16 @@ instance HasSlice Alt where
     makeSlices (sc srcspan) rhs
     mapM_ (makeSlices (sc srcspan)) maybeWheres
 
+genSlices :: Text -> [(Range, [String])] -> [Slice]
+genSlices modName items = zipWith go [0..] items
+  where go sId (range, symbols) = Slice {
+          getRange = range,
+          getSymbols = symbols,
+          getModuleName = modName,
+          getSliceId = sId
+        }
+
+
 main :: IO ()
 main = runSimpleApp $ do
   logFunc <- view logFuncL
@@ -96,12 +114,10 @@ main = runSimpleApp $ do
       logInfo "OK"
       emptyList <- newIORef []
       sliceObj <- runRIO (SliceAssemble logFunc emptyList) (makeSlices global hModule >> ask)
-      slices <- readIORef (getSlices sliceObj)
-      mapM_
-        ( \(loc, symbols) -> do
-            logInfo (displayShow symbols <> ": " <> displayShow loc)
-        )
-        slices
+      slices' <- readIORef (getSlices sliceObj)
+      let modName = moduleName hModule
+      let slices = genSlices modName slices'
+      return ()
     ParseFailed srcLoc message ->
       logInfo "Parsing Failed"
 
