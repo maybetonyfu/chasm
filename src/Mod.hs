@@ -8,17 +8,20 @@ module Mod where
 
 -- import Language.Haskell.Exts.Parser
 -- import Language.Haskell.Exts.Pretty
--- import Language.Haskell.Exts.SrcLoc
+import Language.Haskell.Exts.SrcLoc
 
 import Data.Aeson
 import qualified Data.Aeson.Types as Text
 import Data.String.QQ
 import Language.Haskell.Exts.Syntax
 import RIO hiding ((<|>))
-import qualified RIO.List as L
 import RIO.Process
+import RIO.FilePath ((</>), normalise)
+import qualified RIO.List as L
 import qualified RIO.Text as T
+import qualified RIO.ByteString as B
 import Text.Parsec as P
+import qualified RIO.Process as PR
 import Text.Parsec.Token (GenTokenParser (whiteSpace))
 
 moduleName :: Module a -> Text
@@ -26,31 +29,42 @@ moduleName (Module _ (Just (ModuleHead _ (ModuleName _ name) _ _)) _ _ _) = T.pa
 moduleName (Module _ Nothing _ _ _) = "Main"
 moduleName _ = error "Not a module"
 
-readDependency :: (HasProcessContext env, HasLogFunc env) => FilePath -> FilePath -> RIO env [Bottle a]
+readDependency :: (HasProcessContext env, HasLogFunc env, Show a) => FilePath -> FilePath -> RIO env [Bottle a]
 readDependency root path = do
-  let command = ""
-  (commandOut, _) <- readProcess_ command
-  let outText = decodeUtf8' (toStrictBytes commandOut)
-  case outText of
-    Left e -> error "GHC output is not valid utf8"
-    Right t -> return (parseGhcTypeCheck t)
+  let root' = normalise root
+  let path' = normalise path
+  let runCommand command = do
+        logInfo "Hello Hello !!!"
+        logInfo (display command)
+        (_, commandOut, _) <- readProcess command
+        logInfo "-----------------------"
+        logInfo (displayShow commandOut)
+        logInfo "-----------------------"
+        let outText = decodeUtf8' (toStrictBytes commandOut)
+        case outText of
+          Left e -> error "GHC output is not valid utf8"
+          Right t -> return (parseGhcTypeCheck t)
+  let args = ["-fno-code", "-fforce-recomp", "-ddump-types", "-ddump-json", "-i=" ++ root', root' </> path']
+  PR.proc "ghc" args runCommand
 
 data Bottle a = Bottle
   { bottleName :: Text,
     bottlePath :: FilePath,
     drops :: [(Text, Type a)]
-  }
+  } deriving (Show)
 
 main :: IO ()
 main = runSimpleApp $ do
-  let result1 = P.parse parseCompilerMessageHead "" "[1 of 2] Compiling Test2            ( Test2.hs, nothing )"
-  let result2 = P.parse parseCompilerMessageHead "" "[2 of 2] Compiling Data.Test             ( Data/Test.hs, nothing )"
-  logInfo (displayShow result1)
-  logInfo (displayShow result2)
-  let sigLine1 = P.parse bodyTypeSig "" "  (=.=) :: forall {a}. Num a => a -> a -> a\n"
-  logInfo (displayShow sigLine1)
-  let bodyText = P.parse parseCompilerMessageBody "" "TYPE SIGNATURES\n  fa :: forall a. A a => a -> a\n  x :: Integer\n  y :: Integer\nTYPE CONSTRUCTORS\n  class A{1} :: * -> Constraint\nCOERCION AXIOMS\n  axiom Test2.N:A :: A a = a -> a\nCLASS INSTANCES\n  instance A Int -- Defined at Test2.hs:7:10\nDependent modules: []\nDependent packages: [base-4.16.3.0, ghc-bignum-1.2, ghc-prim-0.8.0]"
-  logInfo (displayShow bodyText)
+  -- let result1 = P.parse parseCompilerMessageHead "" "[1 of 2] Compiling Test2            ( Test2.hs, nothing )"
+  -- let result2 = P.parse parseCompilerMessageHead "" "[2 of 2] Compiling Data.Test        ( Data/Test.hs, nothing )"
+  -- logInfo (displayShow result1)
+  -- logInfo (displayShow result2)
+  -- let sigLine1 = P.parse bodyTypeSig "" "  (=.=) :: forall {a}. Num a => a -> a -> a\n"
+  -- logInfo (displayShow sigLine1)
+  -- let bodyText = P.parse parseCompilerMessageBody "" "TYPE SIGNATURES\n  fa :: forall a. A a => a -> a\n  x :: Integer\n  y :: Integer\nTYPE CONSTRUCTORS\n  class A{1} :: * -> Constraint\nCOERCION AXIOMS\n  axiom Test2.N:A :: A a = a -> a\nCLASS INSTANCES\n  instance A Int -- Defined at Test2.hs:7:10\nDependent modules: []\nDependent packages: [base-4.16.3.0, ghc-bignum-1.2, ghc-prim-0.8.0]"
+  -- logInfo (displayShow bodyText)
+  bottles :: [Bottle SrcSpanInfo] <- readDependency "c:/Users/sfuu0016/Projects/chasm" "Test.hs"
+  logInfo (displayShow bottles)
 
 newtype CompilerMessage = CompilerMessage (Maybe Text) deriving (Show)
 
@@ -72,18 +86,19 @@ parseGhcTypeCheck input =
       utf8Lines = fmap (fromStrictBytes . encodeUtf8) inputLines
       messages :: [CompilerMessage]
       messages = mapMaybe decode utf8Lines
-      go (CompilerMessage e) [] = [[e]]
-      go (CompilerMessage e) ([x] : xs) = ([x, e] : xs)
-      go (CompilerMessage e) xs = ([e] : xs)
+      pickText (CompilerMessage e) [] = [[e]]
+      pickText (CompilerMessage e) ([x] : xs) = ([e, x] : xs)
+      pickText (CompilerMessage e) xs = ([e]:xs)
       combined :: [[Maybe Text]]
-      combined = foldr go [] messages
+      combined = reverse $ foldr pickText [] messages
       go2 [x, y] =
         case (x, y) of
           (Nothing, _) -> error "Module data (e.g. [1 of 2] Compiling X) in compiling message should not be empty"
           (Just x', Nothing) -> (x', "TYPE SIGNATURES\n")
           (Just x', Just y') -> (x', y')
       go2 _ = error "Compiler message are not in pairs"
-      textError = fmap go2 combined
+      textError = -- trace (T.intercalate "\n" (fmap (T.pack . show) combined))
+        fmap go2 combined
    in fmap parseHeadAndBody textError
 
 parseHeadAndBody :: (Text, Text) -> Bottle a
@@ -111,7 +126,7 @@ parseCompilerMessageHead = do
   skipMany space
   char '('
   skipMany space
-  modulePath <- many1 (alphaNum <|> oneOf ".\\/")
+  modulePath <- many1 (alphaNum <|> oneOf ".:\\/")
   char ','
   return (T.pack moduleName, T.pack modulePath)
 
