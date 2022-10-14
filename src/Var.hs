@@ -12,25 +12,26 @@ import Mod
 import RIO
 import Range
 import Slice
+import RIO.List (find)
 
-minimalSliceId :: [Slice] -> String -> SrcSpanInfo -> Maybe Int
-minimalSliceId slices sym srcspan =
-  let containsSymbol = filter (\s -> sym `elem` getSymbols s) slices
-      go slice maybeSlice =
-        case maybeSlice of
-          Nothing -> Just slice
-          Just slice' -> if getRange slice `isWithin` getRange slice' then Just slice else Just slice'
-      minimalSlice = foldr go Nothing containsSymbol
-   in fmap getSliceId minimalSlice
+type ModName = Text
+type SymName = String
 
-minimalSlice :: [Slice] -> String -> SrcSpanInfo -> Maybe Slice
-minimalSlice slices sym srcspan =
+findSliceByRange :: [Slice] -> SymName -> SrcSpanInfo -> Maybe Slice
+findSliceByRange slices sym srcspan =
   let containsSymbol = filter (\s -> sym `elem` getSymbols s) slices
       go slice maybeSlice =
         case maybeSlice of
           Nothing -> Just slice
           Just slice' -> if getRange slice `isWithin` getRange slice' then Just slice else Just slice'
    in foldr go Nothing containsSymbol
+
+findSliceByModname :: [Slice] -> SymName -> ModName -> Maybe Slice
+findSliceByModname slices sym modname =
+  let matchingModule slice = getModuleName slice == modname
+      matchingSlices = filter matchingModule slices
+      containSymbol slice = sym `elem` getSymbols slice
+  in find containSymbol matchingSlices
 
 main :: IO ()
 main = runSimpleApp $ do
@@ -45,7 +46,7 @@ main = runSimpleApp $ do
       sliceObj <- runRIO (SliceAssemble logFunc emptyList) (makeSlices global hModule >> ask)
       slices' <- readIORef (getSlices sliceObj)
       let modName = moduleName hModule
-      let slices = genSlices modName slices'
+      let slices = _genSlices modName slices'
       return ()
     ParseFailed srcLoc message ->
       logInfo "Parsing Failed"

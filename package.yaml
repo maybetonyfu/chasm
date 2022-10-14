@@ -11,6 +11,8 @@ dependencies:
 - rio
 - string-qq
 - haskell-src-exts
+- aeson
+- parsec
 
 library:
   source-dirs: src

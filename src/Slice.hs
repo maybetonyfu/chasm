@@ -93,8 +93,8 @@ instance HasSlice Alt where
     makeSlices (sc srcspan) rhs
     mapM_ (makeSlices (sc srcspan)) maybeWheres
 
-genSlices :: Text -> [(Range, [String])] -> [Slice]
-genSlices modName items = zipWith go [0..] items
+_genSlices :: Text -> [(Range, [String])] -> [Slice]
+_genSlices modName items = zipWith go [0..] items
   where go sId (range, symbols) = Slice {
           getRange = range,
           getSymbols = symbols,
@@ -102,6 +102,14 @@ genSlices modName items = zipWith go [0..] items
           getSliceId = sId
         }
 
+assembleSlices :: HasLogFunc env => Module SrcSpanInfo -> RIO env [Slice]
+assembleSlices mod = do
+  logFunc <- view logFuncL
+  emptyList <- newIORef []
+  sliceObj <- runRIO (SliceAssemble logFunc emptyList) (makeSlices global mod >> ask)
+  slices' <- readIORef (getSlices sliceObj)
+  let slices = _genSlices "Main" slices'
+  return slices
 
 main :: IO ()
 main = runSimpleApp $ do
@@ -112,12 +120,8 @@ main = runSimpleApp $ do
   case pResult of
     ParseOk hModule -> do
       logInfo "OK"
-      emptyList <- newIORef []
-      sliceObj <- runRIO (SliceAssemble logFunc emptyList) (makeSlices global hModule >> ask)
-      slices' <- readIORef (getSlices sliceObj)
-      let modName = moduleName hModule
-      let slices = genSlices modName slices'
-      return ()
+      slices <- assembleSlices hModule
+      logInfo (displayShow slices)
     ParseFailed srcLoc message ->
       logInfo "Parsing Failed"
 

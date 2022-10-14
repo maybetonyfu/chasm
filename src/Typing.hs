@@ -4,19 +4,21 @@
 
 module Typing where
 
-import Data.List (intersperse)
 import Data.String.QQ
 import Language.Haskell.Exts.Parser
 import Language.Haskell.Exts.Pretty
 import Language.Haskell.Exts.SrcLoc
 import Language.Haskell.Exts.Syntax
 import RIO
+import RIO.List
 import Range
+import Slice (Slice(..))
 
 data ConstrAssemble = ConstrAssemble
   { logFun :: LogFunc,
     getConstr :: IORef [Constr],
-    counter :: IORef Int
+    getCounter :: IORef Int,
+    getSlices :: [Slice]
   }
 
 data Constr = Constr
@@ -35,8 +37,8 @@ class HasTyping f where
 fresh :: RIO ConstrAssemble Text
 fresh = do
   s <- ask
-  number <- readIORef (counter s)
-  modifyIORef (counter s) (+ 1)
+  number <- readIORef (getCounter s)
+  modifyIORef (getCounter s) (+ 1)
   return (textDisplay number)
 
 
@@ -70,8 +72,8 @@ instance HasTyping Decl where
     matchTerm vl pat
     matchTerm vr rhs
     logInfo . display $ eq vl vr
-  -- matchTerm t (FunBind srcspan matches) = do
-  --   mapM_ (makeSlices p) matches
+  matchTerm t (FunBind srcspan matches) = do
+    mapM_ (matchTerm t) matches
   matchTerm t node = error ("Node type not support: " ++ show node)
 
 instance HasTyping Pat where
@@ -88,7 +90,7 @@ instance HasTyping Pat where
   matchTerm t node = error $ "Node type not supported: " ++ show node
 
 instance HasTyping Rhs where
-  matchTerm t (UnGuardedRhs srcspan exp) = return ()
+  matchTerm t (UnGuardedRhs srcspan exp) = matchTerm t exp
   matchTerm t node = error ("Node type not support: " ++ show node)
 
 instance HasTyping Exp where
@@ -124,9 +126,16 @@ instance HasTyping Exp where
   matchTerm term (Lit _ _) = do
     return ()
   matchTerm term (Var _ qname) = do
+    logInfo (displayShow qname)
     return ()
   matchTerm term node = do
     return ()
+
+instance HasTyping Match where
+  matchTerm t (Match srcspan name pats rhs maybeWheres) = do
+    return ()
+  matchTerm t (InfixMatch srcInfo pat name pats rhs maybeWheres) =
+    matchTerm t (Match srcInfo name (pat : pats) rhs maybeWheres)
 
 instance HasTyping Literal where
   matchTerm term (Char srcspan _ _) = do
@@ -150,7 +159,13 @@ main = runSimpleApp $ do
       logInfo "OK"
       ioList <- newIORef []
       ioInteger <- newIORef 0
-      constrObj <- runRIO (ConstrAssemble logFunc ioList ioInteger) (matchTerm "" hModule >> ask)
+      constrObj <- runRIO (
+        ConstrAssemble {
+             logFun=logFunc,
+             getConstr=ioList,
+             getCounter=ioInteger,
+             getSlices=[]
+            }) (matchTerm "" hModule >> ask)
       return ()
     ParseFailed srcLoc message ->
       logInfo "Parsing Failed"
@@ -159,5 +174,5 @@ testSample :: String
 testSample =
   [s|
 x = 3
-y = M.x
+y = M.a
 |]
