@@ -13,7 +13,9 @@ import Namable
 import RIO
 import RIO.List
 import Range
-import Mod
+import Bottle
+import Lenses
+
 
 data SliceAssemble = SliceAssemble
   { logFun :: LogFunc,
@@ -102,14 +104,19 @@ _genSlices modName items = zipWith go [0..] items
           getSliceId = sId
         }
 
-assembleSlices :: HasLogFunc env => Module SrcSpanInfo -> RIO env [Slice]
-assembleSlices mod = do
+slicesFromCurrentMod :: HasLogFunc env => Module SrcSpanInfo -> RIO env [Slice]
+slicesFromCurrentMod mod = do
   logFunc <- view logFuncL
   emptyList <- newIORef []
   sliceObj <- runRIO (SliceAssemble logFunc emptyList) (makeSlices global mod >> ask)
   slices' <- readIORef (getSlices sliceObj)
   let slices = _genSlices "Main" slices'
   return slices
+
+slicesFromBottles :: HasBottle env => RIO env [Slice]
+slicesFromBottles = do
+  bottles <- view bottleL
+  return []
 
 main :: IO ()
 main = runSimpleApp $ do
@@ -120,7 +127,7 @@ main = runSimpleApp $ do
   case pResult of
     ParseOk hModule -> do
       logInfo "OK"
-      slices <- assembleSlices hModule
+      slices <- slicesFromCurrentMod hModule
       logInfo (displayShow slices)
     ParseFailed srcLoc message ->
       logInfo "Parsing Failed"

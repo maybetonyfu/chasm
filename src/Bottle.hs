@@ -4,7 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Mod where
+module Bottle where
 
 -- import Language.Haskell.Exts.Parser
 -- import Language.Haskell.Exts.Pretty
@@ -29,7 +29,7 @@ moduleName (Module _ (Just (ModuleHead _ (ModuleName _ name) _ _)) _ _ _) = T.pa
 moduleName (Module _ Nothing _ _ _) = "Main"
 moduleName _ = error "Not a module"
 
-readDependency :: (HasProcessContext env, HasLogFunc env, Show a) => FilePath -> FilePath -> RIO env [Bottle a]
+readDependency :: (HasProcessContext env, HasLogFunc env) => FilePath -> FilePath -> RIO env [Bottle]
 readDependency root path = do
   let root' = normalise root
   let path' = normalise path
@@ -47,10 +47,10 @@ readDependency root path = do
   let args = ["-fno-code", "-fforce-recomp", "-ddump-types", "-ddump-json", "-i=" ++ root', root' </> path']
   PR.proc "ghc" args runCommand
 
-data Bottle a = Bottle
+data Bottle  = Bottle
   { bottleName :: Text,
     bottlePath :: FilePath,
-    drops :: [(Text, Type a)]
+    drops :: [(Text, Text)]
   } deriving (Show)
 
 main :: IO ()
@@ -63,7 +63,7 @@ main = runSimpleApp $ do
   -- logInfo (displayShow sigLine1)
   -- let bodyText = P.parse parseCompilerMessageBody "" "TYPE SIGNATURES\n  fa :: forall a. A a => a -> a\n  x :: Integer\n  y :: Integer\nTYPE CONSTRUCTORS\n  class A{1} :: * -> Constraint\nCOERCION AXIOMS\n  axiom Test2.N:A :: A a = a -> a\nCLASS INSTANCES\n  instance A Int -- Defined at Test2.hs:7:10\nDependent modules: []\nDependent packages: [base-4.16.3.0, ghc-bignum-1.2, ghc-prim-0.8.0]"
   -- logInfo (displayShow bodyText)
-  bottles :: [Bottle SrcSpanInfo] <- readDependency "c:/Users/sfuu0016/Projects/chasm" "Test.hs"
+  bottles <- readDependency "c:/Users/sfuu0016/Projects/chasm" "Test.hs"
   logInfo (displayShow bottles)
 
 newtype CompilerMessage = CompilerMessage (Maybe Text) deriving (Show)
@@ -80,7 +80,7 @@ instance FromJSON CompilerMessage where
           then return (CompilerMessage (Just doc'))
           else return (CompilerMessage Nothing)
 
-parseGhcTypeCheck :: Text -> [Bottle a]
+parseGhcTypeCheck :: Text -> [Bottle]
 parseGhcTypeCheck input =
   let inputLines = T.lines input
       utf8Lines = fmap (fromStrictBytes . encodeUtf8) inputLines
@@ -101,7 +101,7 @@ parseGhcTypeCheck input =
         fmap go2 combined
    in fmap parseHeadAndBody textError
 
-parseHeadAndBody :: (Text, Text) -> Bottle a
+parseHeadAndBody :: (Text, Text) -> Bottle
 parseHeadAndBody (head, body) =
   let headR = P.parse parseCompilerMessageHead "" head
       bodyR = P.parse parseCompilerMessageBody "" body

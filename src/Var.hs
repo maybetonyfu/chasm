@@ -33,20 +33,20 @@ findSliceByModname slices sym modname =
       containSymbol slice = sym `elem` getSymbols slice
   in find containSymbol matchingSlices
 
-main :: IO ()
-main = runSimpleApp $ do
-  logFunc <- view logFuncL
-  let contents = testSample
-  let pResult = parseModuleWithMode parseMode contents
-      parseMode = defaultParseMode {parseFilename = "MyFile"}
-  case pResult of
-    ParseOk hModule -> do
-      logInfo "OK"
-      emptyList <- newIORef []
-      sliceObj <- runRIO (SliceAssemble logFunc emptyList) (makeSlices global hModule >> ask)
-      slices' <- readIORef (getSlices sliceObj)
-      let modName = moduleName hModule
-      let slices = _genSlices modName slices'
-      return ()
-    ParseFailed srcLoc message ->
-      logInfo "Parsing Failed"
+-- main :: IO ()
+-- main = runSimpleApp $ do
+--   logFunc <- view logFuncL
+--   let contents = testSample
+--   let pResult = parseModuleWithMode parseMode contents
+--       parseMode = defaultParseMode {parseFilename = "MyFile"}
+--   case pResult of
+--     ParseOk hModule -> do
+--       logInfo "OK"
+--       emptyList <- newIORef []
+--       sliceObj <- runRIO (SliceAssemble logFunc emptyList) (makeSlices global hModule >> ask)
+--       slices' <- readIORef (getSlices sliceObj)
+--       let modName = moduleName hModule
+--       let slices = _genSlices modName slices'
+--       return ()
+--     ParseFailed srcLoc message ->
+--       logInfo "Parsing Failed"
