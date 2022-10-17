@@ -22,7 +22,7 @@ data Load = Load
 
 data Slice = Slice
   { slRange :: Range,
-    slSymbols :: [String],
+    slSymbols :: [Text],
     slModuleName :: Text,
     slId :: Int
   }
@@ -31,6 +31,6 @@ data Slice = Slice
 data Bottle = Bottle
   { bottleName :: Text,
     bottlePath :: FilePath,
-    drops :: [(Text, Text)]
+    bottleDrops :: [(Text, Text)]
   }
   deriving (Show)

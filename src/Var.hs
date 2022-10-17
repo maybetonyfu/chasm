@@ -14,7 +14,7 @@ import Types
 import RIO.List (find)
 
 type ModName = Text
-type SymName = String
+type SymName = Text
 
 findSliceByRange :: [Slice] -> SymName -> SrcSpanInfo -> Maybe Slice
 findSliceByRange slices sym srcspan =

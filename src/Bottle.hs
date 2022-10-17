@@ -106,7 +106,7 @@ parseHeadAndBody (head, body) =
           Bottle
             { bottleName = head1,
               bottlePath = T.unpack head2,
-              drops = []
+              bottleDrops = []
             }
 
 parseCompilerMessageHead :: Parsec Text () (Text, Text)

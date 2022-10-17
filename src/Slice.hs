@@ -8,6 +8,7 @@ import Language.Haskell.Exts
 import Namable
 import RIO
 import RIO.List
+import RIO.Text as T
 import Range
 import Bottle
 import Types
@@ -23,7 +24,7 @@ addSlices range names = do
   counter <- readIORef counterHandle
   let slice = Slice
         { slRange = range
-        , slSymbols = names
+        , slSymbols = fmap T.pack names
         , slModuleName = "Main"
         , slId = counter
         }
@@ -73,6 +74,7 @@ instance Sliceable Exp where
   makeSlices p (RightSection srcspan _ e) = makeSlices (sc srcspan) e
   makeSlices p (Lit _ _) = return ()
   makeSlices p (Var _ qname) = return ()
+  makeSlices p (Con _ _) = return ()
   makeSlices p node = error $ "Unsupported node type: " ++ show node
 
 instance Sliceable Binds where
@@ -85,6 +87,8 @@ instance Sliceable Alt where
     makeSlices (sc srcspan) rhs
     mapM_ (makeSlices (sc srcspan)) maybeWheres
 
+
+
 loadSlicesCurrentModule :: (HasLogFunc env, HasAST env, HasSlices env, HasSliceCounter env) => RIO env ()
 loadSlicesCurrentModule  = do
   logDebug "Phase: Load slices from current module"
@@ -95,9 +99,24 @@ loadSlicesCurrentModule  = do
     Just hmodule -> do
       makeSlices global hmodule
 
+bottleToSlice :: (HasSliceCounter env, HasSlices env) => Bottle -> RIO env ()
+bottleToSlice (Bottle name _ drops) = do
+  counterHandle <- view sliceCounterL
+  slicesHandle <- view slicesL
+  counter <- readIORef counterHandle
+  let slice = Slice
+        { slRange = global
+        , slSymbols = fmap fst drops
+        , slModuleName = name
+        , slId = counter
+        }
+  modifyIORef counterHandle (+1)
+  modifyIORef slicesHandle (slice:)
+
+
 loadSlicesFromBottles ::  (HasLogFunc env, HasBottle env, HasSlices env, HasSliceCounter env) => RIO env ()
 loadSlicesFromBottles = do
-  logDebug "Phase: Load slices from current module"
+  logDebug "Phase: Load slices from external modules"
   bottleHandle <- view bottleL
   bottles <- readIORef bottleHandle
-  return ()
+  mapM_ bottleToSlice bottles
