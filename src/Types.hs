@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module Types where
@@ -22,10 +21,10 @@ data Load = Load
   deriving (Show)
 
 data Slice = Slice
-  { getRange :: Range,
-    getSymbols :: [String],
-    getModuleName :: Text,
-    getSliceId :: Int
+  { slRange :: Range,
+    slSymbols :: [String],
+    slModuleName :: Text,
+    slId :: Int
   }
   deriving (Show)
 

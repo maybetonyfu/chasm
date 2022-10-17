@@ -10,7 +10,6 @@ import Language.Haskell.Exts
 import Data.Aeson
 import qualified Data.Aeson.Types as Text
 import Data.String.QQ
-import Language.Haskell.Exts.Syntax
 import RIO hiding ((<|>))
 import RIO.Process
 import RIO.FilePath ((</>), normalise)
@@ -19,7 +18,6 @@ import qualified RIO.Text as T
 import qualified RIO.ByteString as B
 import Text.Parsec as P
 import qualified RIO.Process as PR
-import Text.Parsec.Token (GenTokenParser (whiteSpace))
 import Types
 import Lenses
 

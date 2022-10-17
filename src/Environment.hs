@@ -15,6 +15,7 @@ import RIO.Process
 import RIO.Text as T
 import Range
 import Types
+import Slice
 
 data ChasmApp = ChasmApp
   { chLogFunc :: !LogFunc,
@@ -23,7 +24,8 @@ data ChasmApp = ChasmApp
     chAST :: IORef (Maybe (Module SrcSpanInfo)),
     chLoad :: IORef [Load],
     chBottles :: IORef [Bottle],
-    chSlices :: [Slice]
+    chSliceCounter :: IORef Int,
+    chSlices :: IORef [Slice]
   }
 
 instance HasLogFunc ChasmApp where
@@ -43,6 +45,12 @@ instance HasAST ChasmApp where
 
 instance HasLoad ChasmApp where
   loadL = lens chLoad (\x y -> x {chLoad = y})
+
+instance HasSlices ChasmApp where
+  slicesL = lens chSlices (\x y -> x {chSlices = y})
+
+instance HasSliceCounter ChasmApp where
+  sliceCounterL = lens chSliceCounter (\x y -> x {chSliceCounter = y})
 
 parseProgram :: (HasBasicInfo env, HasLogFunc env, HasAST env) => RIO env ()
 parseProgram = do
@@ -65,8 +73,8 @@ plan = do
   parseProgram
   analyzeImports
   loadBottles
-  -- loadSlicesCurrentModule
-  -- loadSlicesFromBottles
+  loadSlicesCurrentModule
+  loadSlicesFromBottles
   -- constraintsFromCurrentModule
   -- constraintsFromBottles
   return ()
@@ -79,6 +87,8 @@ main = do
     emptyAST <- newIORef Nothing
     emptyLoad <- newIORef []
     emptyBottles <- newIORef []
+    zeroSliceCounter <- newIORef 0
+    emptySlices <- newIORef []
     let chApp =
           ChasmApp
             { chLogFunc = lf,
@@ -87,6 +97,7 @@ main = do
               chAST = emptyAST,
               chLoad = emptyLoad,
               chBottles = emptyBottles,
-              chSlices = []
+              chSliceCounter = zeroSliceCounter,
+              chSlices = emptySlices
             }
     runRIO chApp plan

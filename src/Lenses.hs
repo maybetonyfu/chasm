@@ -16,3 +16,9 @@ class HasAST a where
 
 class HasLoad a where
   loadL :: Lens' a (IORef [Load])
+
+class HasSliceCounter a where
+  sliceCounterL :: Lens' a (IORef Int)
+
+class HasSlices a where
+  slicesL :: Lens' a (IORef [Slice])

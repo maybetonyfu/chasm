@@ -1,46 +1,42 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module Slice where
 
 import Data.String.QQ
-import Language.Haskell.Exts.Parser
-import Language.Haskell.Exts.Pretty
-import Language.Haskell.Exts.SrcLoc
-import Language.Haskell.Exts.Syntax
+import Language.Haskell.Exts
 import Namable
 import RIO
 import RIO.List
 import Range
 import Bottle
---import Environment
 import Types
 import Lenses
 
-data SliceAssemble = SliceAssemble
-  { logFun :: LogFunc,
-    getSlices :: IORef [(Range, [String])]
-  }
+class Sliceable f where
+  makeSlices :: (HasSlices env, HasSliceCounter env, HasLogFunc env) => Range -> f SrcSpanInfo -> RIO env ()
 
-instance HasLogFunc SliceAssemble where
-  logFuncL = lens logFun (\x y -> x {logFun = y})
-
-class HasSlice f where
-  makeSlices :: Range -> f SrcSpanInfo -> RIO SliceAssemble ()
-
-addSlices :: Range -> [String] -> RIO SliceAssemble ()
+addSlices :: (HasSlices env, HasSliceCounter env, HasLogFunc env) => Range -> [String] -> RIO env ()
 addSlices range names = do
-  s <- ask
-  modifyIORef (getSlices s) (++ [(range, names)])
+  counterHandle <- view sliceCounterL
+  slicesHandle <- view slicesL
+  counter <- readIORef counterHandle
+  let slice = Slice
+        { slRange = range
+        , slSymbols = names
+        , slModuleName = "Main"
+        , slId = counter
+        }
+  modifyIORef counterHandle (+1)
+  modifyIORef slicesHandle (slice:)
 
-instance HasSlice Module where
+instance Sliceable Module where
   makeSlices _ (Module _ _ _ _ decls) = do
     logInfo "Module"
     mapM_ (makeSlices global) decls
   makeSlices _ _ = error "Not a module"
 
-instance HasSlice Decl where
+instance Sliceable Decl where
   makeSlices p (PatBind srcspan pat rhs maybeWheres) = do
     addSlices p (getNames pat)
     makeSlices (sc srcspan) rhs
@@ -49,7 +45,7 @@ instance HasSlice Decl where
     mapM_ (makeSlices p) matches
   makeSlices p node = error ("Node type not support: " ++ show node)
 
-instance HasSlice Match where
+instance Sliceable Match where
   makeSlices p (Match srcspan name pats rhs maybeWheres) = do
     addSlices p (getNames name)
     addSlices (sc srcspan) (getNames pats)
@@ -58,11 +54,11 @@ instance HasSlice Match where
   makeSlices p (InfixMatch srcInfo pat name pats rhs maybeWheres) =
     makeSlices p (Match srcInfo name (pat : pats) rhs maybeWheres)
 
-instance HasSlice Rhs where
+instance Sliceable Rhs where
   makeSlices p (UnGuardedRhs srcspan exp) = makeSlices (sc srcspan) exp
   makeSlices p node = error ("Node type not support: " ++ show node)
 
-instance HasSlice Exp where
+instance Sliceable Exp where
   makeSlices p (InfixApp srcspan e1 _ e2) = mapM_ (makeSlices (sc srcspan)) [e1, e2]
   makeSlices p (App srcspan e1 e2) = mapM_ (makeSlices (sc srcspan)) [e1, e2]
   makeSlices p (NegApp srcspan e) = makeSlices (sc srcspan) e
@@ -79,57 +75,29 @@ instance HasSlice Exp where
   makeSlices p (Var _ qname) = return ()
   makeSlices p node = error $ "Unsupported node type: " ++ show node
 
-instance HasSlice Binds where
+instance Sliceable Binds where
   makeSlices p (BDecls _ decls) = mapM_ (makeSlices p) decls
   makeSlices p node = error ("Node type not support: " ++ show node)
 
-instance HasSlice Alt where
+instance Sliceable Alt where
   makeSlices p (Alt srcspan pat rhs maybeWheres) = do
     addSlices (sc srcspan) (getNames pat)
     makeSlices (sc srcspan) rhs
     mapM_ (makeSlices (sc srcspan)) maybeWheres
 
-_genSlices :: Text -> [(Range, [String])] -> [Slice]
-_genSlices modName items = zipWith go [0..] items
-  where go sId (range, symbols) = Slice {
-          getRange = range,
-          getSymbols = symbols,
-          getModuleName = modName,
-          getSliceId = sId
-        }
+loadSlicesCurrentModule :: (HasLogFunc env, HasAST env, HasSlices env, HasSliceCounter env) => RIO env ()
+loadSlicesCurrentModule  = do
+  logDebug "Phase: Load slices from current module"
+  astHandle <- view astL
+  maybeAST <- readIORef astHandle
+  case maybeAST of
+    Nothing -> error "Generating slices from current module with empty AST"
+    Just hmodule -> do
+      makeSlices global hmodule
 
-slicesFromCurrentMod :: HasLogFunc env => Module SrcSpanInfo -> RIO env [Slice]
-slicesFromCurrentMod mod = do
-  logFunc <- view logFuncL
-  emptyList <- newIORef []
-  sliceObj <- runRIO (SliceAssemble logFunc emptyList) (makeSlices global mod >> ask)
-  slices' <- readIORef (getSlices sliceObj)
-  let slices = _genSlices "Main" slices'
-  return slices
-
-slicesFromBottles :: HasBottle env => RIO env [Slice]
-slicesFromBottles = do
-  bottles <- view bottleL
-  return []
-
-main :: IO ()
-main = runSimpleApp $ do
-  logFunc <- view logFuncL
-  let contents = testSample
-  let pResult = parseModuleWithMode parseMode contents
-      parseMode = defaultParseMode {parseFilename = "MyFile"}
-  case pResult of
-    ParseOk hModule -> do
-      logInfo "OK"
-      slices <- slicesFromCurrentMod hModule
-      logInfo (displayShow slices)
-    ParseFailed srcLoc message ->
-      logInfo "Parsing Failed"
-
-testSample :: String
-testSample =
-  [s|
-x = y where y = 3
-y = z where z = 3
-u = let p = 4 in p
-|]
+loadSlicesFromBottles ::  (HasLogFunc env, HasBottle env, HasSlices env, HasSliceCounter env) => RIO env ()
+loadSlicesFromBottles = do
+  logDebug "Phase: Load slices from current module"
+  bottleHandle <- view bottleL
+  bottles <- readIORef bottleHandle
+  return ()
