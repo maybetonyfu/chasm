@@ -29,3 +29,5 @@ instance (Show a) => WithName (Pat a) where
   getNames PLit {} = []
   getNames PWildCard {} = []
   getNames p = error $ "Node type not supported: " ++ show p
+
+

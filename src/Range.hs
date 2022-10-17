@@ -3,8 +3,8 @@
 module Range where
 import RIO
 import Language.Haskell.Exts.SrcLoc
+import Types
 
-data Range = Global | Scoped SrcSpan deriving (Show)
 
 sc :: SrcSpanInfo -> Range
 sc = Scoped . srcInfoSpan

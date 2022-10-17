@@ -23,9 +23,12 @@ library
       Bottle
       Environment
       Lenses
+      Load
       Namable
+      Plan
       Range
       Slice
+      Types
       Typing
       Var
   other-modules:

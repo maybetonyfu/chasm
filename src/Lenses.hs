@@ -1,11 +1,18 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module Lenses where
-
 import RIO
-import Bottle (Bottle)
+import Types
+import Language.Haskell.Exts
 
 class HasBottle a where
   bottleL :: Lens' a [Bottle]
 
+class HasBasicInfo a where
+  basicInfoL :: Lens' a BasicInfo
+
+class HasAST a where
+  astL :: Lens' a (IORef (Maybe (Module SrcSpanInfo)))
+
+class HasLoad a where
+  loadL :: Lens' a (IORef [Load])

@@ -12,7 +12,7 @@ import Language.Haskell.Exts.Syntax
 import RIO
 import RIO.List
 import Range
-import Slice (Slice(..))
+import Types
 
 data ConstrAssemble = ConstrAssemble
   { logFun :: LogFunc,

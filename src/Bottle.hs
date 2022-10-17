@@ -6,10 +6,7 @@
 
 module Bottle where
 
--- import Language.Haskell.Exts.Parser
--- import Language.Haskell.Exts.Pretty
-import Language.Haskell.Exts.SrcLoc
-
+import Language.Haskell.Exts
 import Data.Aeson
 import qualified Data.Aeson.Types as Text
 import Data.String.QQ
@@ -23,6 +20,7 @@ import qualified RIO.ByteString as B
 import Text.Parsec as P
 import qualified RIO.Process as PR
 import Text.Parsec.Token (GenTokenParser (whiteSpace))
+import Types
 
 moduleName :: Module a -> Text
 moduleName (Module _ (Just (ModuleHead _ (ModuleName _ name) _ _)) _ _ _) = T.pack name
@@ -46,12 +44,6 @@ readDependency root path = do
           Right t -> return (parseGhcTypeCheck t)
   let args = ["-fno-code", "-fforce-recomp", "-ddump-types", "-ddump-json", "-i=" ++ root', root' </> path']
   PR.proc "ghc" args runCommand
-
-data Bottle  = Bottle
-  { bottleName :: Text,
-    bottlePath :: FilePath,
-    drops :: [(Text, Text)]
-  } deriving (Show)
 
 main :: IO ()
 main = runSimpleApp $ do

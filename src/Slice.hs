@@ -14,20 +14,14 @@ import RIO
 import RIO.List
 import Range
 import Bottle
+--import Environment
+import Types
 import Lenses
-
 
 data SliceAssemble = SliceAssemble
   { logFun :: LogFunc,
     getSlices :: IORef [(Range, [String])]
   }
-
-data Slice = Slice {
-  getRange :: Range,
-  getSymbols :: [String],
-  getModuleName :: Text,
-  getSliceId :: Int
-  } deriving (Show)
 
 instance HasLogFunc SliceAssemble where
   logFuncL = lens logFun (\x y -> x {logFun = y})
