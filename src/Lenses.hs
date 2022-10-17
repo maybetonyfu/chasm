@@ -22,3 +22,6 @@ class HasSliceCounter a where
 
 class HasSlices a where
   slicesL :: Lens' a (IORef [Slice])
+
+class HasTargetName a where
+  targetNameL :: Lens' a (IORef Text)

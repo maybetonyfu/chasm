@@ -91,7 +91,7 @@ parseGhcTypeCheck input =
           (Just x', Nothing) -> (x', "TYPE SIGNATURES\n")
           (Just x', Just y') -> (x', y')
       go2 _ = error "Compiler message are not in pairs"
-      textError = -- trace (T.intercalate "\n" (fmap (T.pack . show) combined))
+      textError =  --trace (T.intercalate "\n" (fmap (T.pack . show) combined))
         fmap go2 combined
    in fmap parseHeadAndBody textError
 
@@ -106,7 +106,7 @@ parseHeadAndBody (head, body) =
           Bottle
             { bottleName = head1,
               bottlePath = T.unpack head2,
-              bottleDrops = []
+              bottleDrops = bs
             }
 
 parseCompilerMessageHead :: Parsec Text () (Text, Text)
@@ -120,7 +120,7 @@ parseCompilerMessageHead = do
   skipMany space
   char '('
   skipMany space
-  modulePath <- many1 (alphaNum <|> oneOf ".:\\/")
+  modulePath <- many1 (alphaNum <|> oneOf ".:-\\/")
   char ','
   return (T.pack moduleName, T.pack modulePath)
 

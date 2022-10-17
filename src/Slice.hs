@@ -8,24 +8,26 @@ import Language.Haskell.Exts
 import Namable
 import RIO
 import RIO.List
-import RIO.Text as T
+import qualified RIO.Text as T
 import Range
 import Bottle
 import Types
 import Lenses
 
 class Sliceable f where
-  makeSlices :: (HasSlices env, HasSliceCounter env, HasLogFunc env) => Range -> f SrcSpanInfo -> RIO env ()
+  makeSlices :: (HasSlices env, HasSliceCounter env, HasLogFunc env, HasTargetName env) => Range -> f SrcSpanInfo -> RIO env ()
 
-addSlices :: (HasSlices env, HasSliceCounter env, HasLogFunc env) => Range -> [String] -> RIO env ()
+addSlices :: (HasSlices env, HasSliceCounter env, HasLogFunc env, HasTargetName env) => Range -> [String] -> RIO env ()
 addSlices range names = do
   counterHandle <- view sliceCounterL
   slicesHandle <- view slicesL
   counter <- readIORef counterHandle
+  targetNameHandle <- view targetNameL
+  targetName <- readIORef targetNameHandle
   let slice = Slice
         { slRange = range
         , slSymbols = fmap T.pack names
-        , slModuleName = "Main"
+        , slModuleName = targetName
         , slId = counter
         }
   modifyIORef counterHandle (+1)
@@ -89,7 +91,7 @@ instance Sliceable Alt where
 
 
 
-loadSlicesCurrentModule :: (HasLogFunc env, HasAST env, HasSlices env, HasSliceCounter env) => RIO env ()
+loadSlicesCurrentModule :: (HasLogFunc env, HasAST env, HasSlices env, HasSliceCounter env, HasTargetName env) => RIO env ()
 loadSlicesCurrentModule  = do
   logDebug "Phase: Load slices from current module"
   astHandle <- view astL
@@ -99,7 +101,7 @@ loadSlicesCurrentModule  = do
     Just hmodule -> do
       makeSlices global hmodule
 
-bottleToSlice :: (HasSliceCounter env, HasSlices env) => Bottle -> RIO env ()
+bottleToSlice :: (HasSliceCounter env, HasSlices env, HasTargetName env) => Bottle -> RIO env ()
 bottleToSlice (Bottle name _ drops) = do
   counterHandle <- view sliceCounterL
   slicesHandle <- view slicesL
@@ -114,9 +116,12 @@ bottleToSlice (Bottle name _ drops) = do
   modifyIORef slicesHandle (slice:)
 
 
-loadSlicesFromBottles ::  (HasLogFunc env, HasBottle env, HasSlices env, HasSliceCounter env) => RIO env ()
+loadSlicesFromBottles ::  (HasLogFunc env, HasBottle env, HasSlices env, HasSliceCounter env, HasTargetName env) => RIO env ()
 loadSlicesFromBottles = do
   logDebug "Phase: Load slices from external modules"
   bottleHandle <- view bottleL
   bottles <- readIORef bottleHandle
-  mapM_ bottleToSlice bottles
+  targetNameHandle <- view targetNameL
+  targetName <- readIORef targetNameHandle
+  let externalBottles = filter (\b -> bottleName b /= targetName) bottles
+  mapM_ bottleToSlice externalBottles

@@ -21,6 +21,7 @@ data ChasmApp = ChasmApp
   { chLogFunc :: !LogFunc,
     chProcessContext :: ProcessContext,
     chBasicInfo :: BasicInfo,
+    chTargetName :: IORef Text,
     chAST :: IORef (Maybe (Module SrcSpanInfo)),
     chLoad :: IORef [Load],
     chBottles :: IORef [Bottle],
@@ -52,6 +53,9 @@ instance HasSlices ChasmApp where
 instance HasSliceCounter ChasmApp where
   sliceCounterL = lens chSliceCounter (\x y -> x {chSliceCounter = y})
 
+instance HasTargetName ChasmApp where
+  targetNameL = lens chTargetName (\x y -> x {chTargetName = y})
+
 parseProgram :: (HasBasicInfo env, HasLogFunc env, HasAST env) => RIO env ()
 parseProgram = do
   logDebug "Stage: Parsing program"
@@ -75,6 +79,9 @@ plan = do
   loadBottles
   loadSlicesCurrentModule
   loadSlicesFromBottles
+  sliceHandle <- view slicesL
+  slices <- readIORef sliceHandle
+  mapM_ (\x -> logDebug (displayShow x)) slices
   -- constraintsFromCurrentModule
   -- constraintsFromBottles
   return ()
@@ -89,11 +96,13 @@ main = do
     emptyBottles <- newIORef []
     zeroSliceCounter <- newIORef 0
     emptySlices <- newIORef []
+    fallbackTargetName <- newIORef "Main"
     let chApp =
           ChasmApp
             { chLogFunc = lf,
               chProcessContext = processContext,
               chBasicInfo = ("c:/Users/sfuu0016/Projects/chasm-example", "Test.hs"),
+              chTargetName = fallbackTargetName,
               chAST = emptyAST,
               chLoad = emptyLoad,
               chBottles = emptyBottles,
