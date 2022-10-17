@@ -21,42 +21,46 @@ import Text.Parsec as P
 import qualified RIO.Process as PR
 import Text.Parsec.Token (GenTokenParser (whiteSpace))
 import Types
+import Lenses
 
 moduleName :: Module a -> Text
 moduleName (Module _ (Just (ModuleHead _ (ModuleName _ name) _ _)) _ _ _) = T.pack name
 moduleName (Module _ Nothing _ _ _) = "Main"
 moduleName _ = error "Not a module"
 
-readDependency :: (HasProcessContext env, HasLogFunc env) => FilePath -> FilePath -> RIO env [Bottle]
-readDependency root path = do
+loadBottles :: (HasProcessContext env, HasLogFunc env, HasBottle env, HasBasicInfo env) => RIO env ()
+loadBottles = do
+  (root, path) <- view basicInfoL
   let root' = normalise root
   let path' = normalise path
   let runCommand command = do
-        logInfo "Hello Hello !!!"
-        logInfo (display command)
+        logDebug (display command)
         (_, commandOut, _) <- readProcess command
-        logInfo "-----------------------"
-        logInfo (displayShow commandOut)
-        logInfo "-----------------------"
+        logDebug "-----------------------"
+        logDebug (displayShow commandOut)
+        logDebug "-----------------------"
         let outText = decodeUtf8' (toStrictBytes commandOut)
         case outText of
           Left e -> error "GHC output is not valid utf8"
           Right t -> return (parseGhcTypeCheck t)
   let args = ["-fno-code", "-fforce-recomp", "-ddump-types", "-ddump-json", "-i=" ++ root', root' </> path']
-  PR.proc "ghc" args runCommand
+  bottles <- PR.proc "ghc" args runCommand
+  bottleHandle <- view bottleL
+  writeIORef bottleHandle bottles
 
-main :: IO ()
-main = runSimpleApp $ do
-  -- let result1 = P.parse parseCompilerMessageHead "" "[1 of 2] Compiling Test2            ( Test2.hs, nothing )"
-  -- let result2 = P.parse parseCompilerMessageHead "" "[2 of 2] Compiling Data.Test        ( Data/Test.hs, nothing )"
-  -- logInfo (displayShow result1)
-  -- logInfo (displayShow result2)
-  -- let sigLine1 = P.parse bodyTypeSig "" "  (=.=) :: forall {a}. Num a => a -> a -> a\n"
-  -- logInfo (displayShow sigLine1)
-  -- let bodyText = P.parse parseCompilerMessageBody "" "TYPE SIGNATURES\n  fa :: forall a. A a => a -> a\n  x :: Integer\n  y :: Integer\nTYPE CONSTRUCTORS\n  class A{1} :: * -> Constraint\nCOERCION AXIOMS\n  axiom Test2.N:A :: A a = a -> a\nCLASS INSTANCES\n  instance A Int -- Defined at Test2.hs:7:10\nDependent modules: []\nDependent packages: [base-4.16.3.0, ghc-bignum-1.2, ghc-prim-0.8.0]"
-  -- logInfo (displayShow bodyText)
-  bottles <- readDependency "c:/Users/sfuu0016/Projects/chasm" "Test.hs"
-  logInfo (displayShow bottles)
+
+-- main :: IO ()
+-- main = runSimpleApp $ do
+--   -- let result1 = P.parse parseCompilerMessageHead "" "[1 of 2] Compiling Test2            ( Test2.hs, nothing )"
+--   -- let result2 = P.parse parseCompilerMessageHead "" "[2 of 2] Compiling Data.Test        ( Data/Test.hs, nothing )"
+--   -- logInfo (displayShow result1)
+--   -- logInfo (displayShow result2)
+--   -- let sigLine1 = P.parse bodyTypeSig "" "  (=.=) :: forall {a}. Num a => a -> a -> a\n"
+--   -- logInfo (displayShow sigLine1)
+--   -- let bodyText = P.parse parseCompilerMessageBody "" "TYPE SIGNATURES\n  fa :: forall a. A a => a -> a\n  x :: Integer\n  y :: Integer\nTYPE CONSTRUCTORS\n  class A{1} :: * -> Constraint\nCOERCION AXIOMS\n  axiom Test2.N:A :: A a = a -> a\nCLASS INSTANCES\n  instance A Int -- Defined at Test2.hs:7:10\nDependent modules: []\nDependent packages: [base-4.16.3.0, ghc-bignum-1.2, ghc-prim-0.8.0]"
+--   -- logInfo (displayShow bodyText)
+--   bottles <- readDependency "c:/Users/sfuu0016/Projects/chasm" "Test.hs"
+--   logInfo (displayShow bottles)
 
 newtype CompilerMessage = CompilerMessage (Maybe Text) deriving (Show)
 

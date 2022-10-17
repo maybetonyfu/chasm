@@ -6,7 +6,7 @@ import Types
 import Language.Haskell.Exts
 
 class HasBottle a where
-  bottleL :: Lens' a [Bottle]
+  bottleL :: Lens' a (IORef [Bottle])
 
 class HasBasicInfo a where
   basicInfoL :: Lens' a BasicInfo

@@ -10,11 +10,10 @@ import RIO.Text as T
 import Language.Haskell.Exts
 
 class HasImport f where
-  registerImports :: (HasLoad env) => f SrcSpanInfo -> RIO env ()
+  registerImports :: (HasLoad env, HasLogFunc env) => f SrcSpanInfo -> RIO env ()
 
 instance HasImport Module where
-  registerImports (Module _ _ _ impts _) = do
-    return ()
+  registerImports (Module _ _ _ impts _) = mapM_ registerImports impts
   registerImports _ = error "Not a module"
 
 instance HasImport ImportDecl where
@@ -44,4 +43,9 @@ instance HasImport ImportDecl where
 analyzeImports :: (HasLoad env, HasLogFunc env, HasAST env) => RIO env ()
 analyzeImports = do
   logDebug "Stage: Analyzing imports"
-  return ()
+  astHandle <- view astL
+  maybeAST <- readIORef astHandle
+  case maybeAST of
+    Nothing -> error "NO AST during analyzing import phase"
+    Just hmodule -> registerImports hmodule
+
