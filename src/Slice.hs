@@ -3,16 +3,16 @@
 
 module Slice where
 
+import Bottle
 import Data.String.QQ
 import Language.Haskell.Exts
+import Lenses
 import Namable
 import RIO
 import RIO.List
 import qualified RIO.Text as T
 import Range
-import Bottle
 import Types
-import Lenses
 
 class Sliceable f where
   makeSlices :: (HasSlices env, HasSliceCounter env, HasLogFunc env, HasTargetName env) => Range -> f SrcSpanInfo -> RIO env ()
@@ -24,14 +24,15 @@ addSlices range names = do
   counter <- readIORef counterHandle
   targetNameHandle <- view targetNameL
   targetName <- readIORef targetNameHandle
-  let slice = Slice
-        { slRange = range
-        , slSymbols = fmap T.pack names
-        , slModuleName = targetName
-        , slId = counter
-        }
-  modifyIORef counterHandle (+1)
-  modifyIORef slicesHandle (slice:)
+  let slice =
+        Slice
+          { slRange = range,
+            slSymbols = fmap T.pack names,
+            slModuleName = targetName,
+            slId = counter
+          }
+  modifyIORef counterHandle (+ 1)
+  modifyIORef slicesHandle (slice :)
 
 instance Sliceable Module where
   makeSlices _ (Module _ _ _ _ decls) = do
@@ -89,10 +90,8 @@ instance Sliceable Alt where
     makeSlices (sc srcspan) rhs
     mapM_ (makeSlices (sc srcspan)) maybeWheres
 
-
-
 loadSlicesCurrentModule :: (HasLogFunc env, HasAST env, HasSlices env, HasSliceCounter env, HasTargetName env) => RIO env ()
-loadSlicesCurrentModule  = do
+loadSlicesCurrentModule = do
   logDebug "Phase: Load slices from current module"
   astHandle <- view astL
   maybeAST <- readIORef astHandle
@@ -101,27 +100,41 @@ loadSlicesCurrentModule  = do
     Just hmodule -> do
       makeSlices global hmodule
 
-bottleToSlice :: (HasSliceCounter env, HasSlices env, HasTargetName env) => Bottle -> RIO env ()
+bottleToSlice :: (HasSliceCounter env, HasSlices env, HasTargetName env, HasLoad env) => Bottle -> RIO env ()
 bottleToSlice (Bottle name _ drops) = do
   counterHandle <- view sliceCounterL
   slicesHandle <- view slicesL
   counter <- readIORef counterHandle
-  let slice = Slice
-        { slRange = global
-        , slSymbols = fmap fst drops
-        , slModuleName = name
-        , slId = counter
-        }
-  modifyIORef counterHandle (+1)
-  modifyIORef slicesHandle (slice:)
+  let slice =
+        Slice
+          { slRange = global,
+            slSymbols = fmap fst drops,
+            slModuleName = name,
+            slId = counter
+          }
+  modifyIORef counterHandle (+ 1)
+  modifyIORef slicesHandle (slice :)
 
+optimizeBottleDrops :: [Load] -> Bottle -> Bottle
+optimizeBottleDrops loads b@(Bottle name path drops) =
+  let matchingLoad = find ((== name) . loadName) loads
+   in case matchingLoad of
+        Nothing -> b
+        Just l ->
+          case loadVars l of
+            All -> b
+            Inc vs -> Bottle name path (filter ((`elem` vs) . fst) drops)
+            Exc vs -> Bottle name path (filter ((`notElem` vs) . fst) drops)
 
-loadSlicesFromBottles ::  (HasLogFunc env, HasBottle env, HasSlices env, HasSliceCounter env, HasTargetName env) => RIO env ()
+loadSlicesFromBottles :: (HasLogFunc env, HasBottle env, HasSlices env, HasSliceCounter env, HasTargetName env, HasLoad env) => RIO env ()
 loadSlicesFromBottles = do
   logDebug "Phase: Load slices from external modules"
   bottleHandle <- view bottleL
   bottles <- readIORef bottleHandle
   targetNameHandle <- view targetNameL
   targetName <- readIORef targetNameHandle
+  loadHandle <- view loadL
+  loads <- readIORef loadHandle
   let externalBottles = filter (\b -> bottleName b /= targetName) bottles
-  mapM_ bottleToSlice externalBottles
+  let optimalBottles = map (optimizeBottleDrops loads) externalBottles
+  mapM_ bottleToSlice optimalBottles
