@@ -34,3 +34,13 @@ data Bottle = Bottle
     bottleDrops :: [(Text, Text)]
   }
   deriving (Show)
+
+
+data Constraint = Constraint
+  { cstId :: Int,
+    cstLoc :: Range
+  }
+
+instance Eq Constraint where
+  c1 == c2 = cstId c1 == cstId c2
+

@@ -79,16 +79,22 @@ plan = do
   loadBottles
   loadSlicesCurrentModule
   loadSlicesFromBottles
-  sliceHandle <- view slicesL
-  slices <- readIORef sliceHandle
-  mapM_ (\x -> logDebug (displayShow x)) slices
+
+  logInfo "\nConstraints:"
+  bottles <- readIORefFromLens bottleL
+  mapM_ (logInfo . displayShow . bottleDrops) bottles
+
+  logInfo "\nLoaded:"
+  slices <- readIORefFromLens slicesL
+  mapM_ (logInfo . displayShow) slices
+
   -- constraintsFromCurrentModule
   -- constraintsFromBottles
   return ()
 
 main :: IO ()
 main = do
-  lo <- logOptionsHandle stderr True
+  lo <- logOptionsHandle stderr False
   withLogFunc lo $ \lf -> do
     processContext <- mkDefaultProcessContext
     emptyAST <- newIORef Nothing

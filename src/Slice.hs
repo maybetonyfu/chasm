@@ -4,7 +4,6 @@
 module Slice where
 
 import Bottle
-import Data.String.QQ
 import Language.Haskell.Exts
 import Lenses
 import Namable
@@ -93,8 +92,7 @@ instance Sliceable Alt where
 loadSlicesCurrentModule :: (HasLogFunc env, HasAST env, HasSlices env, HasSliceCounter env, HasTargetName env) => RIO env ()
 loadSlicesCurrentModule = do
   logDebug "Phase: Load slices from current module"
-  astHandle <- view astL
-  maybeAST <- readIORef astHandle
+  maybeAST <- readIORefFromLens astL
   case maybeAST of
     Nothing -> error "Generating slices from current module with empty AST"
     Just hmodule -> do
@@ -129,12 +127,9 @@ optimizeBottleDrops loads b@(Bottle name path drops) =
 loadSlicesFromBottles :: (HasLogFunc env, HasBottle env, HasSlices env, HasSliceCounter env, HasTargetName env, HasLoad env) => RIO env ()
 loadSlicesFromBottles = do
   logDebug "Phase: Load slices from external modules"
-  bottleHandle <- view bottleL
-  bottles <- readIORef bottleHandle
-  targetNameHandle <- view targetNameL
-  targetName <- readIORef targetNameHandle
-  loadHandle <- view loadL
-  loads <- readIORef loadHandle
+  bottles <- readIORefFromLens bottleL
+  targetName <- readIORefFromLens targetNameL
+  loads <- readIORefFromLens loadL
   let externalBottles = filter (\b -> bottleName b /= targetName) bottles
   let optimalBottles = map (optimizeBottleDrops loads) externalBottles
   mapM_ bottleToSlice optimalBottles

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Lenses where
 import RIO
@@ -25,3 +26,8 @@ class HasSlices a where
 
 class HasTargetName a where
   targetNameL :: Lens' a (IORef Text)
+
+readIORefFromLens :: Lens' env (IORef b) -> RIO env b
+readIORefFromLens l = do
+  handle <- view l
+  readIORef handle
