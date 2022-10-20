@@ -22,6 +22,7 @@ library
   exposed-modules:
       Bottle
       Environment
+      Goal
       Lenses
       Load
       Marco
@@ -40,7 +41,9 @@ library
       aeson
     , base
     , haskell-src-exts
+    , mtl
     , parsec
+    , prolog
     , rio
     , string-qq
   default-language: Haskell2010
@@ -57,7 +60,9 @@ executable chasm
     , base
     , chasm
     , haskell-src-exts
+    , mtl
     , parsec
+    , prolog
     , rio
     , string-qq
   default-language: Haskell2010

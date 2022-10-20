@@ -11,7 +11,7 @@ import Language.Haskell.Exts.Syntax
 import RIO
 import Range
 import Types
-import RIO.List (find)
+import RIO.List
 
 type ModName = Text
 type SymName = Text
@@ -31,4 +31,3 @@ findSliceByModname slices sym modname =
       matchingSlices = filter matchingModule slices
       containSymbol slice = sym `elem` slSymbols slice
   in find containSymbol matchingSlices
-

@@ -13,6 +13,8 @@ dependencies:
 - haskell-src-exts
 - aeson
 - parsec
+- prolog
+- mtl
 
 library:
   source-dirs: src

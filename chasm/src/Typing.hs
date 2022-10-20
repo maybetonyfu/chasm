@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module Typing where
@@ -14,52 +13,8 @@ import RIO.List
 import Range
 import Types
 
-data ConstrAssemble = ConstrAssemble
-  { logFun :: LogFunc,
-    getConstr :: IORef [Constr],
-    getCounter :: IORef Int,
-    getSlices :: [Slice]
-  }
-
-data Constr = Constr
-  { reason :: Text,
-    code :: Text,
-    range :: Range
-  }
-
-instance HasLogFunc ConstrAssemble where
-  logFuncL = lens logFun (\x y -> x {logFun = y})
-
 class HasTyping f where
-  matchTerm :: Text -> f SrcSpanInfo -> RIO ConstrAssemble ()
-
-
-fresh :: RIO ConstrAssemble Text
-fresh = do
-  s <- ask
-  number <- readIORef (getCounter s)
-  modifyIORef (getCounter s) (+ 1)
-  return (textDisplay number)
-
-
-eq :: Text -> Text -> Text
-eq a b =
-  mconcat
-    [ "eq(",
-      textDisplay a,
-      ", ",
-      textDisplay b,
-      ")"
-    ]
-
-app :: Text -> [Text] -> Text
-app f args =
-  mconcat
-    [ textDisplay f,
-      "(",
-      mconcat (intersperse ", " args),
-      ")"
-    ]
+  matchTerm :: (HasLogFunc env) => Text -> f SrcSpanInfo -> RIO env ()
 
 instance HasTyping Module where
   matchTerm t (Module _ _ _ _ decls) = mapM_ (matchTerm t) decls
@@ -67,11 +22,7 @@ instance HasTyping Module where
 
 instance HasTyping Decl where
   matchTerm t (PatBind srcspan pat rhs maybeWheres) = do
-    vl <- fresh
-    vr <- fresh
-    matchTerm vl pat
-    matchTerm vr rhs
-    logInfo . display $ eq vl vr
+    return ()
   matchTerm t (FunBind srcspan matches) = do
     mapM_ (matchTerm t) matches
   matchTerm t node = error ("Node type not support: " ++ show node)
@@ -97,12 +48,7 @@ instance HasTyping Exp where
   matchTerm term (InfixApp srcspan e1 op e2) = do
     return ()
   matchTerm term (App srcspan e1 e2) = do
-    var1 <- fresh
-    var2 <- fresh
-    matchTerm var1 e1
-    matchTerm var2 e2
-    let code = eq term (app var1 [var2])
-    logInfo (display code)
+    return ()
   matchTerm term (NegApp srcspan e) = do
     return ()
   matchTerm term (Lambda srcspan pats e) = do
@@ -123,10 +69,9 @@ instance HasTyping Exp where
     return ()
   matchTerm term (RightSection srcspan _ e) = do
     return ()
-  matchTerm term (Lit _ _) = do
+  matchTerm term (Lit srcspan l) = do
     return ()
   matchTerm term (Var _ qname) = do
-    logInfo (displayShow qname)
     return ()
   matchTerm term node = do
     return ()
@@ -139,40 +84,35 @@ instance HasTyping Match where
 
 instance HasTyping Literal where
   matchTerm term (Char srcspan _ _) = do
-    logInfo (displayShow term <> " = " <> "char")
+    logInfo . display $  term `eq` "char"
+
   matchTerm term (String srcspan _ _) = do
-    logInfo (displayShow term <> " = " <> "string")
+    logInfo . display $ term `eq` "string"
+
   matchTerm term (Int srcspan _ _) = do
-    logInfo (displayShow term <> " = " <> "int")
+    logInfo . display $ term `eq` "int"
+
   matchTerm term (Frac srcspan _ _) = do
-    logInfo (displayShow term <> " = " <> "float")
+    logInfo . display $ term `eq` "float"
+
   matchTerm _ node = error ("Node type not support: " ++ show node)
 
-main :: IO ()
-main = runSimpleApp $ do
-  logFunc <- view logFuncL
-  let contents = testSample
-  let pResult = parseModuleWithMode parseMode contents
-      parseMode = defaultParseMode {parseFilename = "MyFile"}
-  case pResult of
-    ParseOk hModule -> do
-      logInfo "OK"
-      ioList <- newIORef []
-      ioInteger <- newIORef 0
-      constrObj <- runRIO (
-        ConstrAssemble {
-             logFun=logFunc,
-             getConstr=ioList,
-             getCounter=ioInteger,
-             getSlices=[]
-            }) (matchTerm "" hModule >> ask)
-      return ()
-    ParseFailed srcLoc message ->
-      logInfo "Parsing Failed"
 
-testSample :: String
-testSample =
-  [s|
-x = 3
-y = M.a
-|]
+
+eq :: Text -> Text -> Text
+eq a b =
+  mconcat
+    [
+      textDisplay a,
+      " = ",
+      textDisplay b
+    ]
+
+app :: Text -> [Text] -> Text
+app f args =
+  mconcat
+    [ textDisplay f,
+      "(",
+      mconcat (intersperse ", " args),
+      ")"
+    ]

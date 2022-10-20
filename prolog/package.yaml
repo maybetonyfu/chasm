@@ -1,0 +1,34 @@
+name:                prolog
+version:             0.1.0.0
+github:              "maybetonyfu/prolog"
+license:             BSD3
+author:              "Tony Fu"
+maintainer:          "tonyfu@fastmail.com"
+copyright:           "2023 Tony Fu"
+
+dependencies:
+- base
+- parsec
+- syb
+- mtl
+- containers
+- template-haskell
+- th-lift
+- transformers
+
+library:
+  source-dirs: src
+  exposed-modules:
+   - Language.Prolog
+   - Language.Prolog.IsString
+   - Language.Prolog.Quote
+  other-modules:
+   - Prolog
+   - Interpreter
+   - Database
+   - Unifier
+   - Parser
+   - Syntax
+   - IsString
+   - Quote
+   
