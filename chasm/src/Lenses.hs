@@ -27,6 +27,10 @@ class HasSlices a where
 class HasTargetName a where
   targetNameL :: Lens' a (IORef Text)
 
+class HasTypeVarCounter a where
+  typeVarCounterL :: Lens' a (IORef Int)
+
+
 readIORefFromLens :: Lens' env (IORef b) -> RIO env b
 readIORefFromLens l = do
   handle <- view l

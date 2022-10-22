@@ -2,8 +2,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module Goal where
-
+module Goal  where
 import RIO
 import Language.Prolog
 import qualified Text.Parsec as P
@@ -15,11 +14,9 @@ atomFrom x = Struct x []
 
 varFrom = var
 
--- This is wrong.
 funFrom :: Term -> [Term] -> Term
 funFrom  x [] = unit
 funFrom fname (x:xs) = Struct "function" [fname, x, funFrom Wildcard xs]
-
 
 structFunctor :: Term -> Maybe Atom
 structFunctor (Struct x _) = Just x
@@ -28,7 +25,6 @@ structFunctor _ = Nothing
 structArgs :: Term -> Maybe [Term]
 structArgs (Struct _ x) = Just x
 structArgs _ = Nothing
-
 
 isStruct :: Term -> Bool
 isStruct (Struct _ _) = True
@@ -53,11 +49,10 @@ main =  runSimpleApp $ do
   --     logInfo (displayShow (structArgs z))
   -- let myt = Wildcard
   -- logInfo (displayShow myt)
-  withRunInIO $ \run -> do
+  p <- withRunInIO $ \run -> do
     let clauseId = Clause (funFrom (atomFrom "id") [varFrom "X", varFrom "Y"])  [eq (varFrom "X") (varFrom "Y")]
     run . logInfo . displayShow $ clauseId
-    p <- resolve [clauseId] [funFrom (varFrom "ID") [varFrom "X", atomFrom "int"], eq (varFrom "ID") (atomFrom "id")]
-    run (logInfo (displayShow p))
-
+    resolve [clauseId] [atomFrom "true"]
+  logInfo (displayShow p)
 
 

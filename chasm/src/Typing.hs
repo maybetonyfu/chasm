@@ -4,6 +4,7 @@
 module Typing where
 
 import Data.String.QQ
+import qualified RIO.Text as T
 import Language.Haskell.Exts.Parser
 import Language.Haskell.Exts.Pretty
 import Language.Haskell.Exts.SrcLoc
@@ -11,10 +12,49 @@ import Language.Haskell.Exts.Syntax
 import RIO
 import RIO.List
 import Range
+import Lenses
 import Types
+import Goal
+import Var
+import qualified Language.Prolog
+
+type Term = Language.Prolog.Term
+
+logShow :: (Show a, HasLogFunc env) => a -> RIO env ()
+logShow  = logInfo . displayShow
+
+fresh :: (HasTypeVarCounter env) => RIO env Term
+fresh = do
+  typeVarCounterHandle <- view typeVarCounterL
+  value <- readIORef typeVarCounterHandle
+  modifyIORef typeVarCounterHandle (+1)
+  return (varFrom ("Fresh_" ++ show value))
+
+assignVar :: (HasSlices env) => String -> SrcSpanInfo -> RIO env Term
+assignVar v srcspan = do
+  slices <- readIORefFromLens slicesL
+  let mbslice = findSliceByRange slices (T.pack v) srcspan
+  case mbslice of
+    Nothing -> error ("Cannot find symbol: " ++ v)
+    Just slice -> do
+        let vId = show (slId slice)
+        let vMod = T.unpack (slModuleName slice)
+        return (varFrom ("Var_" ++ vMod ++ "_" ++ v ++ "_" ++ vId))
+
+assignQualVar :: (HasSlices env) => String -> String -> RIO env Term
+assignQualVar v m = do
+  slices <- readIORefFromLens slicesL
+  let mbslice = findSliceByModname slices (T.pack v) (T.pack m)
+  case mbslice of
+    Nothing -> error ("Cannot find symbol: " ++ v)
+    Just slice -> do
+        let vId = show (slId slice)
+        let vMod = T.unpack (slModuleName slice)
+        return (varFrom ("Var_" ++ vMod ++ "_" ++ v ++ "_" ++ vId))
+
 
 class HasTyping f where
-  matchTerm :: (HasLogFunc env) => Text -> f SrcSpanInfo -> RIO env ()
+  matchTerm :: (HasLogFunc env, HasTypeVarCounter env, HasSlices env) => Term -> f SrcSpanInfo -> RIO env ()
 
 instance HasTyping Module where
   matchTerm t (Module _ _ _ _ decls) = mapM_ (matchTerm t) decls
@@ -69,10 +109,18 @@ instance HasTyping Exp where
     return ()
   matchTerm term (RightSection srcspan _ e) = do
     return ()
-  matchTerm term (Lit srcspan l) = do
-    return ()
-  matchTerm term (Var _ qname) = do
-    return ()
+  matchTerm term (Lit srcspan l) = matchTerm term l
+  matchTerm term (Var _ (Qual _ (ModuleName _ mname) varname)) = do
+    let getName (Ident _ n) = n
+        getName (Symbol _ n) = n
+    v <- assignQualVar (getName varname) mname
+    logShow (eq term v)
+
+  matchTerm term (Var _ (UnQual l varname)) = do
+    let getName (Ident _ n) = n
+        getName (Symbol _ n) = n
+    v <- assignVar (getName varname) l
+    logShow (eq term v)
   matchTerm term node = do
     return ()
 
@@ -84,35 +132,20 @@ instance HasTyping Match where
 
 instance HasTyping Literal where
   matchTerm term (Char srcspan _ _) = do
-    logInfo . display $  term `eq` "char"
+    let c = eq term (atomFrom "char")
+    logShow c
 
   matchTerm term (String srcspan _ _) = do
-    logInfo . display $ term `eq` "string"
+    let c = eq term (atomFrom "string")
+    logShow c
 
   matchTerm term (Int srcspan _ _) = do
-    logInfo . display $ term `eq` "int"
+    let c = eq term (atomFrom "int")
+    logShow c
 
   matchTerm term (Frac srcspan _ _) = do
-    logInfo . display $ term `eq` "float"
+    let c = eq term (atomFrom "float")
+    logShow c
 
   matchTerm _ node = error ("Node type not support: " ++ show node)
 
-
-
-eq :: Text -> Text -> Text
-eq a b =
-  mconcat
-    [
-      textDisplay a,
-      " = ",
-      textDisplay b
-    ]
-
-app :: Text -> [Text] -> Text
-app f args =
-  mconcat
-    [ textDisplay f,
-      "(",
-      mconcat (intersperse ", " args),
-      ")"
-    ]

@@ -26,7 +26,8 @@ data ChasmApp = ChasmApp
     chLoad :: IORef [Load],
     chBottles :: IORef [Bottle],
     chSliceCounter :: IORef Int,
-    chSlices :: IORef [Slice]
+    chSlices :: IORef [Slice],
+    chTypeVarCounter :: IORef Int
   }
 
 instance HasLogFunc ChasmApp where
@@ -55,6 +56,9 @@ instance HasSliceCounter ChasmApp where
 
 instance HasTargetName ChasmApp where
   targetNameL = lens chTargetName (\x y -> x {chTargetName = y})
+
+instance HasTypeVarCounter ChasmApp where
+  typeVarCounterL = lens chTypeVarCounter (\x y -> x {chTypeVarCounter = y})
 
 parseProgram :: (HasBasicInfo env, HasLogFunc env, HasAST env) => RIO env ()
 parseProgram = do
@@ -87,9 +91,8 @@ plan = do
   logInfo "\nLoaded:"
   slices <- readIORefFromLens slicesL
   mapM_ (logInfo . displayShow) slices
-
-  -- constraintsFromCurrentModule
   -- constraintsFromBottles
+  -- constraintsFromCurrentModule
   return ()
 
 main :: IO ()
@@ -101,6 +104,7 @@ main = do
     emptyLoad <- newIORef []
     emptyBottles <- newIORef []
     zeroSliceCounter <- newIORef 0
+    zeroTypeVarCounter <- newIORef 0
     emptySlices <- newIORef []
     fallbackTargetName <- newIORef "Main"
     let chApp =
@@ -113,6 +117,7 @@ main = do
               chLoad = emptyLoad,
               chBottles = emptyBottles,
               chSliceCounter = zeroSliceCounter,
-              chSlices = emptySlices
+              chSlices = emptySlices,
+              chTypeVarCounter = zeroTypeVarCounter
             }
     runRIO chApp plan
