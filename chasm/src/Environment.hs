@@ -16,6 +16,7 @@ import RIO.Text as T
 import Range
 import Types
 import Slice
+import Typing
 
 data ChasmApp = ChasmApp
   { chLogFunc :: !LogFunc,
@@ -92,8 +93,8 @@ plan = do
   slices <- readIORefFromLens slicesL
   mapM_ (logInfo . displayShow) slices
   -- constraintsFromBottles
-  -- constraintsFromCurrentModule
-  return ()
+  constraintsFromCurrentModule
+
 
 main :: IO ()
 main = do

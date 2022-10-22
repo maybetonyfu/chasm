@@ -9,6 +9,7 @@ import Language.Haskell.Exts.Parser
 import Language.Haskell.Exts.Pretty
 import Language.Haskell.Exts.SrcLoc
 import Language.Haskell.Exts.Syntax
+import Namable
 import RIO
 import RIO.List
 import Range
@@ -30,8 +31,8 @@ fresh = do
   modifyIORef typeVarCounterHandle (+1)
   return (varFrom ("Fresh_" ++ show value))
 
-assignVar :: (HasSlices env) => String -> SrcSpanInfo -> RIO env Term
-assignVar v srcspan = do
+assignVar :: (HasSlices env) =>  SrcSpanInfo -> String -> RIO env Term
+assignVar srcspan v = do
   slices <- readIORefFromLens slicesL
   let mbslice = findSliceByRange slices (T.pack v) srcspan
   case mbslice of
@@ -42,7 +43,7 @@ assignVar v srcspan = do
         return (varFrom ("Var_" ++ vMod ++ "_" ++ v ++ "_" ++ vId))
 
 assignQualVar :: (HasSlices env) => String -> String -> RIO env Term
-assignQualVar v m = do
+assignQualVar m v = do
   slices <- readIORefFromLens slicesL
   let mbslice = findSliceByModname slices (T.pack v) (T.pack m)
   case mbslice of
@@ -62,14 +63,20 @@ instance HasTyping Module where
 
 instance HasTyping Decl where
   matchTerm t (PatBind srcspan pat rhs maybeWheres) = do
-    return ()
+    v <- fresh
+    matchTerm v pat
+    matchTerm v rhs
+
   matchTerm t (FunBind srcspan matches) = do
     mapM_ (matchTerm t) matches
   matchTerm t node = error ("Node type not support: " ++ show node)
 
 instance HasTyping Pat where
-  matchTerm t (PVar _ name) = do
-    logInfo (displayShow name)
+  matchTerm t (PVar srcspan name) = do
+    let names = getNames name
+    vars <- mapM (assignVar srcspan) names
+    let cs = map (eq t) vars
+    mapM_ logShow cs
   matchTerm t (PInfixApp _ p1 op p2) = return ()
   matchTerm t (PApp _ _ ps) = return ()
   matchTerm t (PTuple _ _ ps) = return ()
@@ -110,17 +117,15 @@ instance HasTyping Exp where
   matchTerm term (RightSection srcspan _ e) = do
     return ()
   matchTerm term (Lit srcspan l) = matchTerm term l
+
   matchTerm term (Var _ (Qual _ (ModuleName _ mname) varname)) = do
-    let getName (Ident _ n) = n
-        getName (Symbol _ n) = n
-    v <- assignQualVar (getName varname) mname
+    v <- assignQualVar mname (getSingleName varname)
     logShow (eq term v)
 
-  matchTerm term (Var _ (UnQual l varname)) = do
-    let getName (Ident _ n) = n
-        getName (Symbol _ n) = n
-    v <- assignVar (getName varname) l
+  matchTerm term (Var _ (UnQual srcspan varname)) = do
+    v <- assignVar srcspan (getSingleName varname)
     logShow (eq term v)
+
   matchTerm term node = do
     return ()
 
@@ -148,4 +153,13 @@ instance HasTyping Literal where
     logShow c
 
   matchTerm _ node = error ("Node type not support: " ++ show node)
+
+constraintsFromCurrentModule :: (HasLogFunc env, HasAST env, HasTypeVarCounter env, HasSlices env) => RIO env ()
+constraintsFromCurrentModule = do
+  logDebug "Phase: Load constraints"
+  mbAst <- readIORefFromLens astL
+  case mbAst of
+    Nothing -> error "Load constraints started before ast is ready"
+    Just ast -> do
+      matchTerm unit ast
 
