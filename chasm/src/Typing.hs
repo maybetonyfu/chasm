@@ -4,43 +4,43 @@
 module Typing where
 
 import Data.String.QQ
-import qualified RIO.Text as T
+import Goal
 import Language.Haskell.Exts.Parser
 import Language.Haskell.Exts.Pretty
 import Language.Haskell.Exts.SrcLoc
 import Language.Haskell.Exts.Syntax
+import qualified Language.Prolog
+import Lenses
 import Namable
 import RIO
 import RIO.List
+import qualified RIO.Text as T
 import Range
-import Lenses
 import Types
-import Goal
 import Var
-import qualified Language.Prolog
 
 type Term = Language.Prolog.Term
 
 logShow :: (Show a, HasLogFunc env) => a -> RIO env ()
-logShow  = logInfo . displayShow
+logShow = logInfo . displayShow
 
 fresh :: (HasTypeVarCounter env) => RIO env Term
 fresh = do
   typeVarCounterHandle <- view typeVarCounterL
   value <- readIORef typeVarCounterHandle
-  modifyIORef typeVarCounterHandle (+1)
+  modifyIORef typeVarCounterHandle (+ 1)
   return (varFrom ("Fresh_" ++ show value))
 
-assignVar :: (HasSlices env) =>  SrcSpanInfo -> String -> RIO env String
+assignVar :: (HasSlices env) => SrcSpanInfo -> String -> RIO env String
 assignVar srcspan v = do
   slices <- readIORefFromLens slicesL
   let mbslice = findSliceByRange slices (T.pack v) srcspan
   case mbslice of
     Nothing -> error ("Cannot find symbol: " ++ v)
     Just slice -> do
-        let vId = show (slId slice)
-        let vMod = T.unpack (slModuleName slice)
-        return  $ normModName vMod ++ "_" ++ v ++ "_" ++ vId
+      let vId = show (slId slice)
+      let vMod = T.unpack (slModuleName slice)
+      return $ normModName vMod ++ "_" ++ v ++ "_" ++ vId
 
 assignQualVar :: (HasSlices env) => String -> String -> RIO env String
 assignQualVar m v = do
@@ -49,13 +49,30 @@ assignQualVar m v = do
   case mbslice of
     Nothing -> error ("Cannot find symbol: " ++ v)
     Just slice -> do
-        let vId = show (slId slice)
-        let vMod = T.unpack (slModuleName slice)
-        return $  normModName vMod  ++ "_" ++ v ++ "_" ++ vId
+      let vId = show (slId slice)
+      let vMod = T.unpack (slModuleName slice)
+      return $ normModName vMod ++ "_" ++ v ++ "_" ++ vId
 
+addCstr :: (HasConstraintCounter env, HasConstraints env) => String -> Term -> RIO env ()
+addCstr head body = do
+  constraintCounterHandle <- view constraintCounterL
+  constraintsHandle <- view constraintsL
+  count <- readIORef constraintCounterHandle
+  let constraint = Constraint count head body
+  modifyIORef constraintsHandle (constraint :)
+  modifyIORef constraintCounterHandle (+ 1)
 
 class HasTyping f where
-  matchTerm :: (HasLogFunc env, HasTypeVarCounter env, HasSlices env) => (String, Term) -> f SrcSpanInfo -> RIO env ()
+  matchTerm ::
+    ( HasLogFunc env,
+      HasTypeVarCounter env,
+      HasSlices env,
+      HasConstraintCounter env,
+      HasConstraints env
+    ) =>
+    (String, Term) ->
+    f SrcSpanInfo ->
+    RIO env ()
 
 instance HasTyping Module where
   matchTerm t (Module _ _ _ _ decls) = mapM_ (matchTerm t) decls
@@ -68,11 +85,12 @@ instance HasTyping Decl where
     matchTerm (h, varHead) rhs
   matchTerm (_, t) (TypeSig srcspan names htype) = do
     let typeTerm = typeToTerm htype
-    cs <- mapM (\name -> do
-          v <- assignVar srcspan (getSingleName name)
-          return $ Constraint 0 ("typeof_" ++ v) (eq varHead typeTerm)
-          ) names
-    mapM_ logShow cs
+    mapM_
+      ( \name -> do
+          ident <- assignVar srcspan (getSingleName name)
+          addCstr ("typeof_" ++ ident) (eq varHead typeTerm)
+      )
+      names
 
   matchTerm ht (FunBind srcspan matches) = do
     mapM_ (matchTerm ht) matches
@@ -122,44 +140,33 @@ instance HasTyping Exp where
   matchTerm ht (Lit srcspan l) = matchTerm ht l
   matchTerm (h, t) (Var _ (Qual _ (ModuleName _ mname) varname)) = do
     vname <- assignQualVar mname (getSingleName varname)
-    let c = Constraint 0 h (typeOf vname t)
-    logShow c
-
+    addCstr h (typeOf vname t)
   matchTerm (h, t) (Var _ (UnQual srcspan varname)) = do
     vname <- assignVar srcspan (getSingleName varname)
-    let c = Constraint 0 h (typeOf vname t)
-    logShow c
-
+    addCstr h (typeOf vname t)
   matchTerm term node = error ("Node type not support: " ++ show node)
-
 
 instance HasTyping Match where
   matchTerm ht (Match srcspan name pats rhs maybeWheres) = do
     undefined
-
   matchTerm ht (InfixMatch srcInfo pat name pats rhs maybeWheres) =
     matchTerm ht (Match srcInfo name (pat : pats) rhs maybeWheres)
 
 instance HasTyping Literal where
-  matchTerm (h, t) (Char srcspan _ _) = do
-    let c = Constraint 0 h (eq t (atomFrom "haskell_Char"))
-    logShow c
-
-  matchTerm (h, t) (String srcspan _ _) = do
-    let c = Constraint 0 h (eq t (atomFrom "haskell_String"))
-    logShow c
-
-  matchTerm (h, t) (Int srcspan _ _) = do
-    let c = Constraint 0 h (eq t (atomFrom "haskell_Int"))
-    logShow c
-
-  matchTerm (h, t) (Frac srcspan _ _) = do
-    let c = Constraint 0 h (eq t (atomFrom "haskell_Float"))
-    logShow c
-
+  matchTerm (h, t) (Char srcspan _ _) = addCstr h (eq t (atomFrom "haskell_Char"))
+  matchTerm (h, t) (String srcspan _ _) = addCstr h (eq t (atomFrom "haskell_String"))
+  matchTerm (h, t) (Int srcspan _ _) = addCstr h (eq t (atomFrom "haskell_Int"))
+  matchTerm (h, t) (Frac srcspan _ _) = addCstr h (eq t (atomFrom "haskell_Float"))
   matchTerm _ node = error ("Node type not support: " ++ show node)
 
-constraintsFromCurrentModule :: (HasLogFunc env, HasAST env, HasTypeVarCounter env, HasSlices env) => RIO env ()
+constraintsFromCurrentModule :: (
+  HasLogFunc env,
+  HasAST env,
+  HasTypeVarCounter env,
+  HasSlices env,
+  HasConstraintCounter env,
+  HasConstraints env
+  ) => RIO env ()
 constraintsFromCurrentModule = do
   logDebug "Phase: Load constraints"
   mbAst <- readIORefFromLens astL
@@ -168,45 +175,66 @@ constraintsFromCurrentModule = do
     Just ast -> do
       matchTerm ("", unit) ast
 
-constraintsFromBottles :: (HasLogFunc env, HasTypeVarCounter env, HasBottle env, HasSlices env) => RIO env ()
+constraintsFromBottles ::
+  ( HasLogFunc env,
+    HasTypeVarCounter env,
+    HasBottle env,
+    HasSlices env,
+    HasConstraintCounter env,
+    HasConstraints env
+  ) =>
+  RIO env ()
 constraintsFromBottles = do
   logDebug "Phase: Load constraints from bottles"
   bottles <- readIORefFromLens bottleL
   mapM_ constraintFromBottle bottles
 
-constraintFromBottle :: (HasLogFunc env, HasTypeVarCounter env, HasSlices env) => Bottle -> RIO env ()
+constraintFromBottle ::
+  ( HasLogFunc env,
+    HasTypeVarCounter env,
+    HasSlices env,
+    HasConstraintCounter env,
+    HasConstraints env
+  ) =>
+  Bottle ->
+  RIO env ()
 constraintFromBottle (Bottle mname mpath drops) = do
   mapM_ (constraintFromDrop mname) drops
 
-constraintFromDrop :: (HasLogFunc env, HasTypeVarCounter env, HasSlices env) => Text -> (Text, Type SrcSpanInfo) -> RIO env ()
+constraintFromDrop ::
+  ( HasLogFunc env,
+    HasTypeVarCounter env,
+    HasSlices env,
+    HasConstraintCounter env,
+    HasConstraints env
+  ) =>
+  Text ->
+  (Text, Type SrcSpanInfo) ->
+  RIO env ()
 constraintFromDrop mname (vname, vtype) = do
   let term = typeToTerm vtype
-  v <- assignQualVar (T.unpack mname)  (T.unpack vname)
-  let cstr = Constraint 0 (mconcat ["typeof_", v]) (eq varHead term)
-  logShow cstr
-
+  v <- assignQualVar (T.unpack mname) (T.unpack vname)
+  addCstr (mconcat ["typeof_", v]) (eq varHead term)
 
 typeToTerm :: Type SrcSpanInfo -> Term
-typeToTerm  (TyVar _ name) = varFrom ("TVar_" ++ getSingleName name)
-typeToTerm  (TyCon _ (Qual _ mname name)) = atomFrom ("tc_" ++ normModName (getSingleName mname) ++ "_" ++ getSingleName name)
+typeToTerm (TyVar _ name) = varFrom ("TVar_" ++ getSingleName name)
+typeToTerm (TyCon _ (Qual _ mname name)) = atomFrom ("tc_" ++ normModName (getSingleName mname) ++ "_" ++ getSingleName name)
 typeToTerm (TyCon _ (UnQual _ (Ident _ x))) = atomFrom ("haskell_" ++ x)
-
 -- typeToTerm  (TyList _ t) = lstOf (typeToTerm bindings t)
 -- typeToTerm  (TyFun _ t1 t2) = funOf [typeToTerm bindings t1, typeToTerm bindings t2]
 -- typeToTerm  (TyTuple _ _ ts) = tupOf . map (typeToTerm bindings) $ ts
 -- typeToTerm  (TyUnboxedSum _ ts) = tupOf . map (typeToTerm bindings) $ ts
 -- typeToTerm  (TyApp _ t1 t2) = Pair (typeToTerm bindings t1) (typeToTerm bindings t2) []
 -- typeToTerm  (TyParen _ t) = typeToTerm bindings t
-typeToTerm  t = error ("Unsupported type: " ++ show t)
-
+typeToTerm t = error ("Unsupported type: " ++ show t)
 
 normModName :: String -> String
 normModName [] = []
-normModName ('.':xs) = normModName xs
-normModName (x:xs) = x : normModName xs
+normModName ('.' : xs) = normModName xs
+normModName (x : xs) = x : normModName xs
 
 -- x = 3  x(T) :- T = int.
 
 -- y = x  y(T) :- T = Var_T
 
--- 
+--
