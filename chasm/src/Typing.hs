@@ -137,6 +137,8 @@ instance HasTyping Exp where
   --   return ()
   -- matchTerm term (RightSection srcspan _ e) = do
   --   return ()
+  matchTerm (h, t) (Con srcspan (UnQual _ (Ident _ "True"))) = addCstr h (eq t (atomFrom "haskell_Bool"))
+  matchTerm (h, t) (Con srcspan (UnQual _ (Ident _ "False"))) = addCstr h (eq t (atomFrom "haskell_Bool"))
   matchTerm ht (Lit srcspan l) = matchTerm ht l
   matchTerm (h, t) (Var _ (Qual _ (ModuleName _ mname) varname)) = do
     vname <- assignQualVar mname (getSingleName varname)
@@ -232,9 +234,3 @@ normModName :: String -> String
 normModName [] = []
 normModName ('.' : xs) = normModName xs
 normModName (x : xs) = x : normModName xs
-
--- x = 3  x(T) :- T = int.
-
--- y = x  y(T) :- T = Var_T
-
---

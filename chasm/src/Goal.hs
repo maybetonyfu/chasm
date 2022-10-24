@@ -4,6 +4,9 @@
 
 module Goal  where
 import RIO
+import qualified RIO.List as L
+import Types
+import Lenses
 import Language.Prolog
 import qualified Text.Parsec as P
 
@@ -41,22 +44,27 @@ isVar _ = False
 eq :: Term -> Term -> Term
 eq a b = Struct "=" [a, b]
 
-main :: IO ()
-main =  runSimpleApp $ do
-  -- let t = P.parse term "" "X = Y"
-  -- case t of
-  --   Left _ -> logInfo "Error"
-  --   Right z -> do
-  --     logInfo (displayShow z)
-  --     logInfo (displayShow (isStruct z))
-  --     logInfo (displayShow (structFunctor z))
-  --     logInfo (displayShow (structArgs z))
-  -- let myt = Wildcard
-  -- logInfo (displayShow myt)
-  p <- withRunInIO $ \run -> do
-    let clauseId = Clause (funFrom (atomFrom "id") [varFrom "X", varFrom "Y"])  [eq (varFrom "X") (varFrom "Y")]
-    run . logInfo . displayShow $ clauseId
-    resolve [clauseId] [atomFrom "true"]
-  logInfo (displayShow p)
+solve :: (HasConstraints env, HasLogFunc env) => RIO env Bool
+solve = do
+  constraints <- readIORefFromLens constraintsL
+  let heads = L.nub $ map cstHead constraints
+  let mkClause head =
+         let matchHead = filter ((== head) . cstHead) constraints
+             bodies = map cstBody matchHead
+         in  Clause (Struct head [varHead]) bodies
+  let clauses = map mkClause heads
+  mapM_ (logInfo . displayShow) clauses
+  let goals  = map (\h -> Struct h [Wildcard]) heads
+  results <-withRunInIO $ \run -> do
+    resolve clauses goals
+  return (not $ null results)
+
+-- main :: IO ()
+-- main =  runSimpleApp $ do
+--   p <- withRunInIO $ \run -> do
+--     let clauseId = Clause (funFrom (atomFrom "id") [varFrom "X", varFrom "Y"])  [eq (varFrom "X") (varFrom "Y")]
+--     run . logInfo . displayShow $ clauseId
+--     resolve [clauseId] [atomFrom "true"]
+--   logInfo (displayShow p)
 
 

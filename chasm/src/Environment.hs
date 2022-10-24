@@ -17,6 +17,7 @@ import Range
 import Types
 import Slice
 import Typing
+import Goal
 
 data ChasmApp = ChasmApp
   { chLogFunc :: !LogFunc,
@@ -87,23 +88,17 @@ parseProgram = do
 
 plan :: RIO ChasmApp ()
 plan = do
-  parseProgram
-  analyzeImports
-  
-  loadBottles
-  loadSlicesCurrentModule
-  loadSlicesFromBottles
+  parseProgram -- ast
+  analyzeImports -- load, targetName
 
-  logInfo "\nConstraints:"
-  bottles <- readIORefFromLens bottleL
-  mapM_ (logInfo . displayShow . bottleDrops) bottles
+  loadBottles -- bottles
+  loadSlicesCurrentModule -- slices
+  loadSlicesFromBottles -- slices
 
-  logInfo "\nLoaded:"
-  slices <- readIORefFromLens slicesL
-  mapM_ (logInfo . displayShow) slices
-  constraintsFromBottles
-  constraintsFromCurrentModule
-
+  constraintsFromBottles --constraints
+  constraintsFromCurrentModule --constraints
+  sat <- solve
+  logInfo . displayShow $ sat
 
 main :: IO ()
 main = do
