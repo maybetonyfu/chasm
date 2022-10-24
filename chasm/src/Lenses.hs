@@ -30,6 +30,11 @@ class HasTargetName a where
 class HasTypeVarCounter a where
   typeVarCounterL :: Lens' a (IORef Int)
 
+class HasConstraintCounter a where
+  constraintCounterL :: Lens' a (IORef Int)
+
+class HasConstraints a where
+  constraintsL :: Lens' a (IORef [Constraint])
 
 readIORefFromLens :: Lens' env (IORef b) -> RIO env b
 readIORefFromLens l = do

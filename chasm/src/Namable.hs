@@ -31,10 +31,14 @@ instance (Show a) => WithName (Pat a) where
   getNames p = error $ "Node type not supported: " ++ show p
 
 
-class (Show a) => WithSingleName a where
+class  WithSingleName a where
   getSingleName :: a -> String
 
-instance (Show a) => WithSingleName (Name a) where
+instance WithSingleName (Name a) where
   getSingleName (Ident _ name) = name
   getSingleName (Symbol _ name) = name
+
+instance  WithSingleName (ModuleName a) where
+  getSingleName (ModuleName _ name) = name
+
 

@@ -3,6 +3,7 @@
 module Types where
 
 import Language.Haskell.Exts
+import Language.Prolog (Term)
 import RIO
 
 data Range = Global | Scoped SrcSpan deriving (Show)
@@ -31,15 +32,16 @@ data Slice = Slice
 data Bottle = Bottle
   { bottleName :: Text,
     bottlePath :: FilePath,
-    bottleDrops :: [(Text, Text)]
+    bottleDrops :: [(Text, Type SrcSpanInfo)]
   }
   deriving (Show)
 
 
 data Constraint = Constraint
   { cstId :: Int,
-    cstLoc :: Range
-  }
+    cstHead :: String,
+    cstBody :: Term
+  } deriving (Show)
 
 instance Eq Constraint where
   c1 == c2 = cstId c1 == cstId c2

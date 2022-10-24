@@ -8,11 +8,15 @@ import Language.Prolog
 import qualified Text.Parsec as P
 
 unit = Struct "unit" []
+varHead = varFrom "T"
 
 atomFrom :: String -> Term
 atomFrom x = Struct x []
 
 varFrom = var
+
+typeOf :: String -> Term -> Term
+typeOf x t = Struct ("typeof_" ++ x) [t]
 
 funFrom :: Term -> [Term] -> Term
 funFrom  x [] = unit

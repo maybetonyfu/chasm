@@ -26,7 +26,18 @@ moduleName (Module _ (Just (ModuleHead _ (ModuleName _ name) _ _)) _ _ _) = T.pa
 moduleName (Module _ Nothing _ _ _) = "Main"
 moduleName _ = error "Not a module"
 
-loadBottles :: (HasProcessContext env, HasLogFunc env, HasBottle env, HasBasicInfo env) => RIO env ()
+optimizeBottleDrops :: [Load] -> Bottle -> Bottle
+optimizeBottleDrops loads b@(Bottle name path drops) =
+  let matchingLoad = L.find ((== name) . loadName) loads
+   in case matchingLoad of
+        Nothing -> b
+        Just l ->
+          case loadVars l of
+            All -> b
+            Inc vs -> Bottle name path (filter ((`elem` vs) . fst) drops)
+            Exc vs -> Bottle name path (filter ((`notElem` vs) . fst) drops)
+
+loadBottles :: (HasProcessContext env, HasLogFunc env, HasBottle env, HasBasicInfo env, HasLoad env, HasTargetName env) => RIO env ()
 loadBottles = do
   (root, path) <- view basicInfoL
   let root' = normalise root
@@ -43,8 +54,14 @@ loadBottles = do
           Right t -> return (parseGhcTypeCheck t)
   let args = ["-fno-code", "-fforce-recomp", "-ddump-types", "-ddump-json", "-i=" ++ root', root' </> path']
   bottles <- PR.proc "ghc" args runCommand
+
+  targetName <- readIORefFromLens targetNameL
+  loads <- readIORefFromLens loadL
+  let externalBottles = filter (\b -> bottleName b /= targetName) bottles
+  let optimalBottles = map (optimizeBottleDrops loads) externalBottles
+
   bottleHandle <- view bottleL
-  writeIORef bottleHandle bottles
+  writeIORef bottleHandle optimalBottles
 
 
 -- main :: IO ()
@@ -124,7 +141,7 @@ parseCompilerMessageHead = do
   char ','
   return (T.pack moduleName, T.pack modulePath)
 
-parseCompilerMessageBody :: Parsec Text () [(Text, Text)]
+parseCompilerMessageBody :: Parsec Text () [(Text, Type SrcSpanInfo)]
 parseCompilerMessageBody = do
   -- TYPE SIGNATURES
   --   fa :: forall a. A a => a -> a
@@ -151,7 +168,7 @@ haskellOperator = do
 
 haskellName = haskellIdentifier <|> haskellOperator
 
-bodyTypeSig :: Parsec Text () (Text, Text)
+bodyTypeSig :: Parsec Text () (Text, Type SrcSpanInfo)
 bodyTypeSig = do
   many1 space
   name <- haskellName
@@ -159,7 +176,8 @@ bodyTypeSig = do
   string "::"
   space
   sig <- manyTill anyChar endOfLine
-  return (name, T.pack sig)
+  let hType = fromParseResult (parseType sig)
+  return (name, hType)
 
 sampleOutput :: Text
 sampleOutput =

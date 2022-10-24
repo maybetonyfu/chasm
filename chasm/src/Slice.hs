@@ -46,6 +46,7 @@ instance Sliceable Decl where
     mapM_ (makeSlices (sc srcspan)) maybeWheres
   makeSlices p (FunBind srcspan matches) = do
     mapM_ (makeSlices p) matches
+  makeSlices _ TypeSig {} = return ()
   makeSlices p node = error ("Node type not support: " ++ show node)
 
 instance Sliceable Match where
@@ -113,23 +114,9 @@ bottleToSlice (Bottle name _ drops) = do
   modifyIORef counterHandle (+ 1)
   modifyIORef slicesHandle (slice :)
 
-optimizeBottleDrops :: [Load] -> Bottle -> Bottle
-optimizeBottleDrops loads b@(Bottle name path drops) =
-  let matchingLoad = find ((== name) . loadName) loads
-   in case matchingLoad of
-        Nothing -> b
-        Just l ->
-          case loadVars l of
-            All -> b
-            Inc vs -> Bottle name path (filter ((`elem` vs) . fst) drops)
-            Exc vs -> Bottle name path (filter ((`notElem` vs) . fst) drops)
 
 loadSlicesFromBottles :: (HasLogFunc env, HasBottle env, HasSlices env, HasSliceCounter env, HasTargetName env, HasLoad env) => RIO env ()
 loadSlicesFromBottles = do
   logDebug "Phase: Load slices from external modules"
   bottles <- readIORefFromLens bottleL
-  targetName <- readIORefFromLens targetNameL
-  loads <- readIORefFromLens loadL
-  let externalBottles = filter (\b -> bottleName b /= targetName) bottles
-  let optimalBottles = map (optimizeBottleDrops loads) externalBottles
-  mapM_ bottleToSlice optimalBottles
+  mapM_ bottleToSlice bottles
