@@ -5,6 +5,7 @@ module Lenses where
 import RIO
 import Types
 import Language.Haskell.Exts
+import SAT.MiniSat (Formula)
 
 class HasBottle a where
   bottleL :: Lens' a (IORef [Bottle])
@@ -35,6 +36,13 @@ class HasConstraintCounter a where
 
 class HasConstraints a where
   constraintsL :: Lens' a (IORef [Constraint])
+
+
+class HasMarcoSeed a where
+  marcoSeedL :: Lens' a (IORef [Constraint])
+
+class HasMarcoMap a where
+  marcoMapL :: Lens' a (IORef [Formula Int])
 
 readIORefFromLens :: Lens' env (IORef b) -> RIO env b
 readIORefFromLens l = do

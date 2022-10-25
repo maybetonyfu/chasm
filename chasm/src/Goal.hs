@@ -9,6 +9,8 @@ import Types
 import Lenses
 import Language.Prolog
 import qualified Text.Parsec as P
+import qualified RIO.Text as T
+import qualified RIO.Text.Partial as TP
 
 unit = Struct "unit" []
 varHead = varFrom "T"
@@ -44,27 +46,40 @@ isVar _ = False
 eq :: Term -> Term -> Term
 eq a b = Struct "=" [a, b]
 
-solve :: (HasConstraints env, HasLogFunc env) => RIO env Bool
-solve = do
+wellTyped :: (HasConstraints env, HasLogFunc env) => RIO env Bool
+wellTyped = do
   constraints <- readIORefFromLens constraintsL
-  let heads = L.nub $ map cstHead constraints
+  sat constraints
+
+sat :: (HasLogFunc env, HasConstraints env) => [Constraint] -> RIO env Bool
+sat constraints = do
+  clauses <- generateClauses constraints
+  goals  <- generateGoals
+  results <-withRunInIO $ \run -> do
+    resolve clauses goals
+  return (not $ null results)
+
+generateClauses :: (HasLogFunc env, HasConstraints env) => [Constraint] -> RIO env [Clause]
+generateClauses constraints = do
+  allCons <- readIORefFromLens constraintsL
+  let heads = map cstHead allCons
   let mkClause head =
          let matchHead = filter ((== head) . cstHead) constraints
              bodies = map cstBody matchHead
          in  Clause (Struct head [varHead]) bodies
   let clauses = map mkClause heads
-  mapM_ (logInfo . displayShow) clauses
+  return clauses
+
+generateGoals :: (HasLogFunc env, HasConstraints env) => RIO env [Term]
+generateGoals  = do
+  allCons <- readIORefFromLens constraintsL
+  let heads = L.nub $ map cstHead allCons
   let goals  = map (\h -> Struct h [Wildcard]) heads
-  results <-withRunInIO $ \run -> do
-    resolve clauses goals
-  return (not $ null results)
+  return goals
 
--- main :: IO ()
--- main =  runSimpleApp $ do
---   p <- withRunInIO $ \run -> do
---     let clauseId = Clause (funFrom (atomFrom "id") [varFrom "X", varFrom "Y"])  [eq (varFrom "X") (varFrom "Y")]
---     run . logInfo . displayShow $ clauseId
---     resolve [clauseId] [atomFrom "true"]
---   logInfo (displayShow p)
-
-
+simplifyShow :: Clause -> Text
+simplifyShow clause =
+  let text = T.pack (show clause)
+      no_type_of = TP.replace "typeof_" T.empty text
+      no_haskell = TP.replace "haskell_" T.empty no_type_of
+  in no_haskell

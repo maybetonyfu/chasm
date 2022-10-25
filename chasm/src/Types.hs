@@ -8,7 +8,7 @@ import RIO
 
 data Range = Global | Scoped SrcSpan deriving (Show)
 
-data LoadVars = All | Inc [Text] | Exc [Text] deriving (Show)
+data LoadVars = Everything | Inc [Text] | Exc [Text] deriving (Show)
 
 type BasicInfo = (FilePath, FilePath)
 

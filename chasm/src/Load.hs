@@ -33,7 +33,7 @@ instance HasImport ImportDecl where
         extractImportList (IVar _ name:ss) = packName name : extractImportList ss
         extractImportList (_:ss) = extractImportList ss
     let items' = case maybeSpecs of
-          Nothing -> All
+          Nothing -> Everything
           Just (ImportSpecList _ False specs) -> Inc (extractImportList specs)
           Just (ImportSpecList _ True specs) -> Exc (extractImportList specs)
     let load' = Load

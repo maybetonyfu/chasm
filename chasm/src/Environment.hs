@@ -18,6 +18,8 @@ import Types
 import Slice
 import Typing
 import Goal
+import Marco
+import SAT.MiniSat (Formula)
 
 data ChasmApp = ChasmApp
   { chLogFunc :: !LogFunc,
@@ -31,7 +33,9 @@ data ChasmApp = ChasmApp
     chSlices :: IORef [Slice],
     chTypeVarCounter :: IORef Int,
     chConstraintConter :: IORef Int,
-    chConstraints :: IORef [Constraint]
+    chConstraints :: IORef [Constraint],
+    chMarcoSeed :: IORef [Constraint],
+    chMarcoMap :: IORef [Formula Int]
   }
 
 instance HasLogFunc ChasmApp where
@@ -70,6 +74,12 @@ instance HasConstraintCounter ChasmApp where
 instance HasConstraints ChasmApp where
   constraintsL = lens chConstraints (\x y -> x {chConstraints = y})
 
+instance HasMarcoSeed ChasmApp where
+  marcoSeedL = lens chMarcoSeed (\x y -> x {chMarcoSeed = y})
+
+instance HasMarcoMap ChasmApp where
+  marcoMapL = lens chMarcoMap (\x y -> x {chMarcoMap = y})
+
 parseProgram :: (HasBasicInfo env, HasLogFunc env, HasAST env) => RIO env ()
 parseProgram = do
   logDebug "Stage: Parsing program"
@@ -97,8 +107,9 @@ plan = do
 
   constraintsFromBottles --constraints
   constraintsFromCurrentModule --constraints
-  sat <- solve
-  logInfo . displayShow $ sat
+  -- isWellTyped <- wellTyped
+  -- logInfo . displayShow $ isWellTyped
+  runMarco
 
 main :: IO ()
 main = do
@@ -114,6 +125,8 @@ main = do
     fallbackTargetName <- newIORef "Main"
     zeroConstraintConter <- newIORef 0
     emptyConstraints <- newIORef []
+    emptyMarcoSeed <- newIORef []
+    emptyMarcoMap <- newIORef []
     let chApp =
           ChasmApp
             { chLogFunc = lf,
@@ -126,7 +139,9 @@ main = do
               chSliceCounter = zeroSliceCounter,
               chSlices = emptySlices,
               chTypeVarCounter = zeroTypeVarCounter,
-              chConstraintConter = zeroSliceCounter,
-              chConstraints = emptyConstraints
+              chConstraintConter = zeroConstraintConter,
+              chConstraints = emptyConstraints,
+              chMarcoSeed = emptyMarcoSeed,
+              chMarcoMap = emptyMarcoMap
             }
     runRIO chApp plan

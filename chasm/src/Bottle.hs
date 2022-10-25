@@ -33,7 +33,7 @@ optimizeBottleDrops loads b@(Bottle name path drops) =
         Nothing -> b
         Just l ->
           case loadVars l of
-            All -> b
+            Everything -> b
             Inc vs -> Bottle name path (filter ((`elem` vs) . fst) drops)
             Exc vs -> Bottle name path (filter ((`notElem` vs) . fst) drops)
 
@@ -91,6 +91,27 @@ instance FromJSON CompilerMessage where
           then return (CompilerMessage (Just doc'))
           else return (CompilerMessage Nothing)
 
+seperateHeader :: [CompilerMessage] -> [(Text, Text)]
+seperateHeader [] = []
+seperateHeader (CompilerMessage (Just e):xs) =
+  let isHeader = T.isPrefixOf "[" e
+  in if isHeader
+        then
+          let (body, rest) = seperateBody xs
+              safeBody = if T.null body then "TYPE SIGNATURES\n" else body
+          in (e, safeBody):seperateHeader rest
+        else error "Should always start with header"
+
+seperateBody :: [CompilerMessage] -> (Text, [CompilerMessage])
+seperateBody [] = ("", [])
+seperateBody (CompilerMessage Nothing: xs) = seperateBody xs
+seperateBody ts@(CompilerMessage (Just e): xs) =
+  let isHeader = T.isPrefixOf "[" e
+  in if isHeader
+        then ("", ts)
+        else let continued = seperateBody xs
+             in (e <> fst continued, snd continued)
+
 parseGhcTypeCheck :: Text -> [Bottle]
 parseGhcTypeCheck input =
   let inputLines = T.lines input
@@ -100,17 +121,19 @@ parseGhcTypeCheck input =
       pickText (CompilerMessage e) [] = [[e]]
       pickText (CompilerMessage e) ([x] : xs) = ([e, x] : xs)
       pickText (CompilerMessage e) xs = ([e]:xs)
-      combined :: [[Maybe Text]]
-      combined = reverse $ foldr pickText [] messages
-      go2 [x, y] =
-        case (x, y) of
-          (Nothing, _) -> error "Module data (e.g. [1 of 2] Compiling X) in compiling message should not be empty"
-          (Just x', Nothing) -> (x', "TYPE SIGNATURES\n")
-          (Just x', Just y') -> (x', y')
-      go2 _ = error "Compiler message are not in pairs"
-      textError =  --trace (T.intercalate "\n" (fmap (T.pack . show) combined))
-        fmap go2 combined
-   in fmap parseHeadAndBody textError
+      sepd ::[(Text, Text)]
+      sepd = seperateHeader messages
+      -- combined :: [[Maybe Text]]
+      -- combined = trace (T.unlines $ fmap (T.pack . show) sepd) reverse $ foldr pickText [] messages
+      -- go2 [x, y] =
+      --   case (x, y) of
+      --     (Nothing, _) -> error "Module data (e.g. [1 of 2] Compiling X) in compiling message should not be empty"
+      --     (Just x', Nothing) -> (x', "TYPE SIGNATURES\n")
+      --     (Just x', Just y') -> (x', y')
+      -- go2 _ = error "Compiler message are not in pairs"
+      -- textError =  --trace (T.intercalate "\n" (fmap (T.pack . show) combined))
+      --   fmap go2 combined
+   in fmap parseHeadAndBody sepd
 
 parseHeadAndBody :: (Text, Text) -> Bottle
 parseHeadAndBody (head, body) =
