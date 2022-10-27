@@ -18,7 +18,6 @@ data MarcoState = Marco
     mcMsses :: [[Constraint]]
   }
 
-
 shrink ::(HasLogFunc env, HasConstraints env) => [Constraint] -> RIO env [Constraint]
 shrink [] = error "A satisifiable seed is provided to the 'shrink' function"
 shrink seed = do
@@ -43,18 +42,21 @@ grow constraints seed = do
     [] -> return seed
     (nextSeed:_) -> grow constraints nextSeed
 
-runMarco :: (HasLogFunc env, HasConstraints env, HasMarcoMap env) => RIO env ()
+runMarco :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMUSs env, HasMSSs env) => RIO env ()
 runMarco = do
   constraints <- readIORefFromLens constraintsL
 --  mapM_ (logInfo . displayShow) constraints --
   clauses <- generateClauses constraints
   let textClause = map simplifyShow clauses
-  let mapping = zip constraints textClause
-  forM_ mapping (\(c, clause) -> do
-                    let number = cstId c
-                    let numberInfo = T.pack $ "Constraint " ++ show number ++ ": "
-                    let combined = numberInfo <> clause
-                    logInfo (display combined))
+  logInfo "\nClauses: "
+  forM_ textClause (logInfo . display)
+  logInfo "\nConstraints: "
+  forM_ constraints (\c -> do
+                        let num = T.pack . show . cstId $ c
+                        let head = T.pack . cstHead $ c
+                        let body = T.pack . show . cstBody $ c
+                        logInfo . display $ (num <> ": Head: " <> head <> ", Body: " <> body)
+                        )
 
   let constraintIds = map cstId constraints
       formulas = map Var constraintIds
@@ -63,7 +65,7 @@ runMarco = do
   writeIORef marcoMapHandle tautologies
   marco
 
-marco ::  (HasLogFunc env, HasConstraints env, HasMarcoMap env) => RIO env ()
+marco :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMUSs env, HasMSSs env) => RIO env ()
 marco = do
   marcoMap <- readIORefFromLens marcoMapL
   let marcoMapSat = satisfiable (All marcoMap)
@@ -75,10 +77,10 @@ marco = do
       seed <- getUnexplored
       isSat <- sat seed
       if isSat
-        then marcoMSS seed
-        else marcoMUS seed
+        then marcoMSS seed >> marco
+        else marcoMUS seed >> marco
 
-marcoMSS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env) => [Constraint] -> RIO env ()
+marcoMSS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMSSs env) => [Constraint] -> RIO env ()
 marcoMSS seed = do
   constraints <- readIORefFromLens constraintsL
   mss <- grow constraints seed
@@ -89,13 +91,13 @@ marcoMSS seed = do
   let inverseIds = map cstId inverseConstraints
   let formula = Some (map Var inverseIds)
 
-  -- logInfo "New Formular:"
-  -- logInfo (displayShow formula)
   marcoMapHandle <- view marcoMapL
   modifyIORef marcoMapHandle (formula:)
-  marco
+  mssHandle <- view mssesL
+  modifyIORef mssHandle (mss:)
 
-marcoMUS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env) => [Constraint] -> RIO env ()
+
+marcoMUS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMUSs env) => [Constraint] -> RIO env ()
 marcoMUS seed = do
   mus <- shrink seed
   logInfo ("\nFound MUS: " <> displayShow (map cstId mus))
@@ -104,20 +106,8 @@ marcoMUS seed = do
   let formula = Some (map (Not . Var) ids)
   marcoMapHandle <- view marcoMapL
   modifyIORef marcoMapHandle (formula:)
-  marco
-
-
--- marcoMUS :: [Constraint] -> RIO env ()
--- marcoMUS constraints m@(Marco mMap mSeed mMus mMss) =
---   let mus = shrink sat mSeed
---       m' = Marco (filter (\node -> null (node `intersect` mus)) mMap) mSeed (mus : mMus) mMss --
---    in marco sat constraints m'
-
--- marcoMSS :: [Constraint] -> MarcoState -> MarcoState
--- marcoMSS constraints m@(Marco mMap mSeed mMus mMss) =
---   let mss = grow sat constraints mSeed
---       m' = Marco (filter (\node -> all (\c -> c `elem` mss) node) mMap) mSeed mMus (mss : mMss)
---    in marco sat constraints m'
+  mssHandle <- view musesL
+  modifyIORef mssHandle (mus:)
 
 getUnexplored ::  (HasLogFunc env, HasConstraints env, HasMarcoMap env) => RIO env [Constraint]
 getUnexplored = do

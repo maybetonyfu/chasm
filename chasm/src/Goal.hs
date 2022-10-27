@@ -21,11 +21,14 @@ atomFrom x = Struct x []
 varFrom = var
 
 typeOf :: String -> Term -> Term
-typeOf x t = Struct ("typeof_" ++ x) [t]
+typeOf x t = Struct x [t]
 
-funFrom :: Term -> [Term] -> Term
-funFrom  x [] = unit
-funFrom fname (x:xs) = Struct "function" [fname, x, funFrom Wildcard xs]
+-- funFrom :: Term -> [Term] -> Term
+-- funFrom  x [] = unit
+-- funFrom fname (x:xs) = Struct "function" [fname, x, funFrom Wildcard xs]
+functionFrom :: [Term] -> Term
+functionFrom [] = unit
+functionFrom (x:xs) = Struct "function" [x, functionFrom xs]
 
 structFunctor :: Term -> Maybe Atom
 structFunctor (Struct x _) = Just x
@@ -62,7 +65,7 @@ sat constraints = do
 generateClauses :: (HasLogFunc env, HasConstraints env) => [Constraint] -> RIO env [Clause]
 generateClauses constraints = do
   allCons <- readIORefFromLens constraintsL
-  let heads = map cstHead allCons
+  let heads = L.nub (map cstHead allCons)
   let mkClause head =
          let matchHead = filter ((== head) . cstHead) constraints
              bodies = map cstBody matchHead

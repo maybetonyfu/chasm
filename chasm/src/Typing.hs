@@ -40,7 +40,7 @@ assignVar srcspan v = do
     Just slice -> do
       let vId = show (slId slice)
       let vMod = T.unpack (slModuleName slice)
-      return $ normModName vMod ++ "_" ++ v ++ "_" ++ vId
+      return $ "typeof_" ++ normModName vMod ++ "_" ++ v ++ "_" ++ vId
 
 assignQualVar :: (HasSlices env) => String -> String -> RIO env String
 assignQualVar m v = do
@@ -51,14 +51,14 @@ assignQualVar m v = do
     Just slice -> do
       let vId = show (slId slice)
       let vMod = T.unpack (slModuleName slice)
-      return $ normModName vMod ++ "_" ++ v ++ "_" ++ vId
+      return $ "typeof" ++ normModName vMod ++ "_" ++ v ++ "_" ++ vId
 
-addCstr :: (HasConstraintCounter env, HasConstraints env) => String -> Term -> RIO env ()
-addCstr head body = do
+addCstr :: (HasConstraintCounter env, HasConstraints env) => String -> Term -> SrcSpanInfo -> RIO env ()
+addCstr head body loc = do
   constraintCounterHandle <- view constraintCounterL
   constraintsHandle <- view constraintsL
   count <- readIORef constraintCounterHandle
-  let constraint = Constraint count head body
+  let constraint = Constraint count head body (srcInfoSpan loc)
   modifyIORef constraintsHandle (constraint :)
   modifyIORef constraintCounterHandle (+ 1)
 
@@ -80,32 +80,36 @@ instance HasTyping Module where
 
 instance HasTyping Decl where
   matchTerm (_, t) (PatBind srcspan (PVar _ name) rhs maybeWheres) = do
-    ident <- assignVar srcspan (getSingleName name)
-    let h = "typeof_" ++ ident
+    h <- assignVar srcspan (getSingleName name)
     matchTerm (h, varHead) rhs
   matchTerm (_, t) (TypeSig srcspan names htype) = do
     let typeTerm = typeToTerm htype
     mapM_
       ( \name -> do
-          ident <- assignVar srcspan (getSingleName name)
-          addCstr ("typeof_" ++ ident) (eq varHead typeTerm)
+          h <- assignVar srcspan (getSingleName name)
+          addCstr h (eq varHead typeTerm) srcspan
       )
       names
-
-  matchTerm ht (FunBind srcspan matches) = do
-    mapM_ (matchTerm ht) matches
+  matchTerm _ (FunBind srcspan matches@(match : _)) = do
+    let (Match _ name _ _ _) = match
+    h <- assignVar srcspan (getSingleName name)
+    mapM_ (matchTerm (h, varHead)) matches
   matchTerm _ node = error ("Node type not support: " ++ show node)
 
 instance HasTyping Pat where
   -- matchTerm (h, t) (PVar srcspan name) = retrun ()
   -- matchTerm t (PInfixApp _ p1 op p2) = return ()
-  -- matchTerm t (PApp _ _ ps) = return ()
+
+  matchTerm (h, t) (PApp srcspan (UnQual _ (Ident _ "True")) []) = addCstr h (eq t (atomFrom "haskell_Bool")) srcspan
+  matchTerm (h, t) (PApp srcspan (UnQual _ (Ident _ "False")) []) = addCstr h (eq t (atomFrom "haskell_Bool")) srcspan
+  -- matchTerm t (PApp _ _ pats) = do
+  --   return ()
   -- matchTerm t (PTuple _ _ ps) = return ()
   -- matchTerm t (PList _ ps) = return ()
-  -- matchTerm t (PParen _ p) = return ()
+  matchTerm (h, t) (PParen _ p) = matchTerm (h, t) p
   -- matchTerm t (PAsPat _ name p) = return ()
-  -- matchTerm t PLit {} = return ()
-  -- matchTerm t PWildCard {} = return ()
+  matchTerm (h, t) (PLit _ _ l) = matchTerm (h, t) l
+  matchTerm t PWildCard {} = return ()
   matchTerm t node = error $ "Node type not supported: " ++ show node
 
 instance HasTyping Rhs where
@@ -131,44 +135,51 @@ instance HasTyping Exp where
   --   return ()
   -- matchTerm term (List srcspan exps) = do
   --   return ()
-  -- matchTerm term (Paren srcspan e) = do
-  --   return ()
+  matchTerm (h, t) (Paren srcspan e) = matchTerm (h, t) e
   -- matchTerm term (LeftSection srcspan e _) = do
   --   return ()
   -- matchTerm term (RightSection srcspan _ e) = do
   --   return ()
-  matchTerm (h, t) (Con srcspan (UnQual _ (Ident _ "True"))) = addCstr h (eq t (atomFrom "haskell_Bool"))
-  matchTerm (h, t) (Con srcspan (UnQual _ (Ident _ "False"))) = addCstr h (eq t (atomFrom "haskell_Bool"))
+  matchTerm (h, t) (Con srcspan (UnQual _ (Ident _ "True"))) = addCstr h (eq t (atomFrom "haskell_Bool")) srcspan
+  matchTerm (h, t) (Con srcspan (UnQual _ (Ident _ "False"))) = addCstr h (eq t (atomFrom "haskell_Bool")) srcspan
   matchTerm ht (Lit srcspan l) = matchTerm ht l
-  matchTerm (h, t) (Var _ (Qual _ (ModuleName _ mname) varname)) = do
+  matchTerm (h, t) (Var srcspan (Qual _ (ModuleName _ mname) varname)) = do
     vname <- assignQualVar mname (getSingleName varname)
-    addCstr h (typeOf vname t)
+    addCstr h (typeOf vname t) srcspan
   matchTerm (h, t) (Var _ (UnQual srcspan varname)) = do
     vname <- assignVar srcspan (getSingleName varname)
-    addCstr h (typeOf vname t)
+    addCstr h (typeOf vname t) srcspan
   matchTerm term node = error ("Node type not support: " ++ show node)
 
 instance HasTyping Match where
-  matchTerm ht (Match srcspan name pats rhs maybeWheres) = do
-    undefined
+  matchTerm (h, t) (Match srcspan name pats rhs maybeWheres) = do
+    let matchArg pat = do
+          v <- fresh
+          matchTerm (h, v) pat
+          return v
+    vargs <- mapM matchArg pats
+    vrhs <- fresh
+    matchTerm (h, vrhs) rhs
+    addCstr h (eq t (functionFrom (vargs ++ [vrhs]))) srcspan
   matchTerm ht (InfixMatch srcInfo pat name pats rhs maybeWheres) =
     matchTerm ht (Match srcInfo name (pat : pats) rhs maybeWheres)
 
 instance HasTyping Literal where
-  matchTerm (h, t) (Char srcspan _ _) = addCstr h (eq t (atomFrom "haskell_Char"))
-  matchTerm (h, t) (String srcspan _ _) = addCstr h (eq t (atomFrom "haskell_String"))
-  matchTerm (h, t) (Int srcspan _ _) = addCstr h (eq t (atomFrom "haskell_Int"))
-  matchTerm (h, t) (Frac srcspan _ _) = addCstr h (eq t (atomFrom "haskell_Float"))
+  matchTerm (h, t) (Char srcspan _ _) = addCstr h (eq t (atomFrom "haskell_Char")) srcspan
+  matchTerm (h, t) (String srcspan _ _) = addCstr h (eq t (atomFrom "haskell_String")) srcspan
+  matchTerm (h, t) (Int srcspan _ _) = addCstr h (eq t (atomFrom "haskell_Int")) srcspan
+  matchTerm (h, t) (Frac srcspan _ _) = addCstr h (eq t (atomFrom "haskell_Float")) srcspan
   matchTerm _ node = error ("Node type not support: " ++ show node)
 
-constraintsFromCurrentModule :: (
-  HasLogFunc env,
-  HasAST env,
-  HasTypeVarCounter env,
-  HasSlices env,
-  HasConstraintCounter env,
-  HasConstraints env
-  ) => RIO env ()
+constraintsFromCurrentModule ::
+  ( HasLogFunc env,
+    HasAST env,
+    HasTypeVarCounter env,
+    HasSlices env,
+    HasConstraintCounter env,
+    HasConstraints env
+  ) =>
+  RIO env ()
 constraintsFromCurrentModule = do
   logDebug "Phase: Load constraints"
   mbAst <- readIORefFromLens astL
@@ -183,13 +194,15 @@ constraintsFromBottles ::
     HasBottle env,
     HasSlices env,
     HasConstraintCounter env,
-    HasConstraints env
+    HasConstraints env,
+    HasLoad env
   ) =>
   RIO env ()
 constraintsFromBottles = do
   logDebug "Phase: Load constraints from bottles"
   bottles <- readIORefFromLens bottleL
-  mapM_ constraintFromBottle bottles
+  loads <- readIORefFromLens loadL
+  mapM_ (constraintFromBottle loads) bottles
 
 constraintFromBottle ::
   ( HasLogFunc env,
@@ -198,10 +211,11 @@ constraintFromBottle ::
     HasConstraintCounter env,
     HasConstraints env
   ) =>
+  [Load] ->
   Bottle ->
   RIO env ()
-constraintFromBottle (Bottle mname mpath drops) = do
-  mapM_ (constraintFromDrop mname) drops
+constraintFromBottle loads (Bottle mname mpath drops)  = do
+  mapM_ (constraintFromDrop loads mname ) drops
 
 constraintFromDrop ::
   ( HasLogFunc env,
@@ -210,13 +224,25 @@ constraintFromDrop ::
     HasConstraintCounter env,
     HasConstraints env
   ) =>
+  [Load] ->
   Text ->
   (Text, Type SrcSpanInfo) ->
   RIO env ()
-constraintFromDrop mname (vname, vtype) = do
+constraintFromDrop loads mname (vname, vtype) = do
   let term = typeToTerm vtype
-  v <- assignQualVar (T.unpack mname) (T.unpack vname)
-  addCstr (mconcat ["typeof_", v]) (eq varHead term)
+  let mbloc = findLoadLocation loads mname vname
+  case mbloc of
+    Nothing -> return ()
+    Just loc -> do
+     v <- assignQualVar (T.unpack mname) (T.unpack vname)
+     addCstr (mconcat ["typeof_", v]) (eq varHead term) loc
+
+findLoadLocation :: [Load] -> Text -> Text -> Maybe SrcSpanInfo
+findLoadLocation loads mname vname =
+  let go (Load name loc _ _ Everything) = name == mname
+      go (Load name loc _ _ (Inc vars)) = name == mname && vname `elem` vars
+      go (Load name loc _ _ (Exc vars)) = name == mname && vname `notElem` vars
+  in fmap loadLoc (find go loads)
 
 typeToTerm :: Type SrcSpanInfo -> Term
 typeToTerm (TyVar _ name) = varFrom ("TVar_" ++ getSingleName name)

@@ -38,7 +38,7 @@ instance HasImport ImportDecl where
           Just (ImportSpecList _ True specs) -> Exc (extractImportList specs)
     let load' = Load
          { loadName = name'
-         , loadLoc = srcInfoSpan srcspan
+         , loadLoc = srcspan
          , loadQual = isQual
          , loadAs = as'
          , loadVars = items'

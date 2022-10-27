@@ -35,7 +35,9 @@ data ChasmApp = ChasmApp
     chConstraintConter :: IORef Int,
     chConstraints :: IORef [Constraint],
     chMarcoSeed :: IORef [Constraint],
-    chMarcoMap :: IORef [Formula Int]
+    chMarcoMap :: IORef [Formula Int],
+    chMUSes :: IORef [[Constraint]],
+    chMSSes :: IORef [[Constraint]]
   }
 
 instance HasLogFunc ChasmApp where
@@ -80,6 +82,13 @@ instance HasMarcoSeed ChasmApp where
 instance HasMarcoMap ChasmApp where
   marcoMapL = lens chMarcoMap (\x y -> x {chMarcoMap = y})
 
+instance HasMUSs ChasmApp where
+  musesL = lens chMUSes (\x y -> x {chMUSes = y})
+
+instance HasMSSs ChasmApp where
+  mssesL = lens chMUSes (\x y -> x {chMSSes = y})
+
+
 parseProgram :: (HasBasicInfo env, HasLogFunc env, HasAST env) => RIO env ()
 parseProgram = do
   logDebug "Stage: Parsing program"
@@ -98,6 +107,7 @@ parseProgram = do
 
 plan :: RIO ChasmApp ()
 plan = do
+  -----Preperation Phases----------------------
   parseProgram -- ast
   analyzeImports -- load, targetName
 
@@ -107,9 +117,12 @@ plan = do
 
   constraintsFromBottles --constraints
   constraintsFromCurrentModule --constraints
-  -- isWellTyped <- wellTyped
-  -- logInfo . displayShow $ isWellTyped
-  runMarco
+  ------Analysis Phases------------------------
+  isWellTyped <- wellTyped
+  if isWellTyped
+    then logInfo "Program is well typed"
+    else runMarco
+  ---------------------------------------------
 
 main :: IO ()
 main = do
@@ -127,6 +140,8 @@ main = do
     emptyConstraints <- newIORef []
     emptyMarcoSeed <- newIORef []
     emptyMarcoMap <- newIORef []
+    emptyMUSes <- newIORef []
+    emptyMSSes <- newIORef []
     let chApp =
           ChasmApp
             { chLogFunc = lf,
@@ -142,6 +157,8 @@ main = do
               chConstraintConter = zeroConstraintConter,
               chConstraints = emptyConstraints,
               chMarcoSeed = emptyMarcoSeed,
-              chMarcoMap = emptyMarcoMap
+              chMarcoMap = emptyMarcoMap,
+              chMUSes = emptyMUSes,
+              chMSSes = emptyMSSes
             }
     runRIO chApp plan

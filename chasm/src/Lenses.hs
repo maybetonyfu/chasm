@@ -37,12 +37,17 @@ class HasConstraintCounter a where
 class HasConstraints a where
   constraintsL :: Lens' a (IORef [Constraint])
 
-
 class HasMarcoSeed a where
   marcoSeedL :: Lens' a (IORef [Constraint])
 
 class HasMarcoMap a where
   marcoMapL :: Lens' a (IORef [Formula Int])
+
+class HasMUSs a where
+  musesL :: Lens' a (IORef [[Constraint]])
+
+class HasMSSs a where
+  mssesL :: Lens' a (IORef [[Constraint]])
 
 readIORefFromLens :: Lens' env (IORef b) -> RIO env b
 readIORefFromLens l = do

@@ -123,16 +123,6 @@ parseGhcTypeCheck input =
       pickText (CompilerMessage e) xs = ([e]:xs)
       sepd ::[(Text, Text)]
       sepd = seperateHeader messages
-      -- combined :: [[Maybe Text]]
-      -- combined = trace (T.unlines $ fmap (T.pack . show) sepd) reverse $ foldr pickText [] messages
-      -- go2 [x, y] =
-      --   case (x, y) of
-      --     (Nothing, _) -> error "Module data (e.g. [1 of 2] Compiling X) in compiling message should not be empty"
-      --     (Just x', Nothing) -> (x', "TYPE SIGNATURES\n")
-      --     (Just x', Just y') -> (x', y')
-      -- go2 _ = error "Compiler message are not in pairs"
-      -- textError =  --trace (T.intercalate "\n" (fmap (T.pack . show) combined))
-      --   fmap go2 combined
    in fmap parseHeadAndBody sepd
 
 parseHeadAndBody :: (Text, Text) -> Bottle

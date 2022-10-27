@@ -14,7 +14,7 @@ type BasicInfo = (FilePath, FilePath)
 
 data Load = Load
   { loadName :: Text,
-    loadLoc :: SrcSpan,
+    loadLoc :: SrcSpanInfo,
     loadQual :: Bool,
     loadAs :: Maybe Text,
     loadVars :: LoadVars
@@ -40,7 +40,8 @@ data Bottle = Bottle
 data Constraint = Constraint
   { cstId :: Int,
     cstHead :: String,
-    cstBody :: Term
+    cstBody :: Term,
+    cstLoc :: SrcSpan
   } deriving (Show)
 
 instance Eq Constraint where
