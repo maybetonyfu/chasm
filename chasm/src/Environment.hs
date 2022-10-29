@@ -12,13 +12,14 @@ import Load
 import RIO
 import RIO.FilePath
 import RIO.Process
-import RIO.Text as T
+import qualified RIO.Text as T
 import Range
 import Types
 import Slice
 import Typing
 import Goal
 import Marco
+import Analysis
 import SAT.MiniSat (Formula)
 
 data ChasmApp = ChasmApp
@@ -86,8 +87,7 @@ instance HasMUSs ChasmApp where
   musesL = lens chMUSes (\x y -> x {chMUSes = y})
 
 instance HasMSSs ChasmApp where
-  mssesL = lens chMUSes (\x y -> x {chMSSes = y})
-
+  mssesL = lens chMSSes (\x y -> x {chMSSes = y})
 
 parseProgram :: (HasBasicInfo env, HasLogFunc env, HasAST env) => RIO env ()
 parseProgram = do
@@ -121,7 +121,11 @@ plan = do
   isWellTyped <- wellTyped
   if isWellTyped
     then logInfo "Program is well typed"
-    else runMarco
+    else do
+      runMarco
+      report
+      
+
   ---------------------------------------------
 
 main :: IO ()

@@ -100,14 +100,16 @@ marcoMSS seed = do
 marcoMUS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMUSs env) => [Constraint] -> RIO env ()
 marcoMUS seed = do
   mus <- shrink seed
-  logInfo ("\nFound MUS: " <> displayShow (map cstId mus))
+  logInfo "\nFound MUS:"
+  logInfo . displayShow . map cstId $ mus
 
   let ids = map cstId mus
   let formula = Some (map (Not . Var) ids)
   marcoMapHandle <- view marcoMapL
   modifyIORef marcoMapHandle (formula:)
-  mssHandle <- view musesL
-  modifyIORef mssHandle (mus:)
+
+  musHandle <- view musesL
+  modifyIORef musHandle (mus:)
 
 getUnexplored ::  (HasLogFunc env, HasConstraints env, HasMarcoMap env) => RIO env [Constraint]
 getUnexplored = do
