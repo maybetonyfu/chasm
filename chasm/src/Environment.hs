@@ -21,6 +21,7 @@ import Goal
 import Marco
 import Analysis
 import SAT.MiniSat (Formula)
+import RIO.List ((\\))
 
 data ChasmApp = ChasmApp
   { chLogFunc :: !LogFunc,
@@ -123,8 +124,11 @@ plan = do
     then logInfo "Program is well typed"
     else do
       runMarco
+      msss <- readIORefFromLens mssesL
+      constraints <- readIORefFromLens constraintsL
+      let mcss = map (constraints \\)  msss
+      -- forM_ mcss (logInfo . displayShow . map cstId)
       report
-      
 
   ---------------------------------------------
 
