@@ -48,15 +48,15 @@ runMarco = do
 --  mapM_ (logInfo . displayShow) constraints --
   clauses <- generateClauses constraints
   let textClause = map simplifyShow clauses
-  logInfo "\nClauses: "
-  forM_ textClause (logInfo . display)
-  logInfo "\nConstraints: "
-  forM_ constraints (\c -> do
-                        let num = T.pack . show . cstId $ c
-                        let head = T.pack . cstHead $ c
-                        let body = T.pack . show . cstBody $ c
-                        logInfo . display $ (num <> ": Head: " <> head <> ", Body: " <> body)
-                        )
+  -- logInfo "\nClauses: "
+  -- forM_ textClause (logInfo . display)
+  -- logInfo "\nConstraints: "
+  -- forM_ constraints (\c -> do
+  --                       let num = T.pack . show . cstId $ c
+  --                       let head = T.pack . cstHead $ c
+  --                       let body = T.pack . show . cstBody $ c
+  --                       logInfo . display $ (num <> ": Head: " <> head <> ", Body: " <> body)
+  --                       )
 
   let constraintIds = map cstId constraints
       formulas = map Var constraintIds
@@ -71,7 +71,7 @@ marco = do
   let marcoMapSat = satisfiable (All marcoMap)
   if not marcoMapSat
     then do
-      logInfo "\nMarco map is no longer satisfiable. The search is over."
+      -- logInfo "\nMarco map is no longer satisfiable. The search is over."
       return ()
     else do
       seed <- getUnexplored
@@ -100,8 +100,8 @@ marcoMSS seed = do
 marcoMUS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMUSs env) => [Constraint] -> RIO env ()
 marcoMUS seed = do
   mus <- shrink seed
-  logInfo "\nFound MUS:"
-  logInfo . displayShow . map cstId $ mus
+  -- logInfo "\nFound MUS:"
+  -- logInfo . displayShow . map cstId $ mus
 
   let ids = map cstId mus
   let formula = Some (map (Not . Var) ids)

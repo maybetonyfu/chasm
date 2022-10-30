@@ -20,8 +20,8 @@ import Typing
 import Goal
 import Marco
 import Analysis
+import Report
 import SAT.MiniSat (Formula)
-import RIO.List ((\\))
 
 data ChasmApp = ChasmApp
   { chLogFunc :: !LogFunc,
@@ -39,7 +39,9 @@ data ChasmApp = ChasmApp
     chMarcoSeed :: IORef [Constraint],
     chMarcoMap :: IORef [Formula Int],
     chMUSes :: IORef [[Constraint]],
-    chMSSes :: IORef [[Constraint]]
+    chMSSes :: IORef [[Constraint]],
+    chMCSes :: IORef [[Constraint]],
+    chIslands :: IORef [[Int]]
   }
 
 instance HasLogFunc ChasmApp where
@@ -90,6 +92,13 @@ instance HasMUSs ChasmApp where
 instance HasMSSs ChasmApp where
   mssesL = lens chMSSes (\x y -> x {chMSSes = y})
 
+instance HasMCSs ChasmApp where
+  mcsesL = lens chMCSes (\x y -> x {chMCSes = y})
+
+instance HasIslands ChasmApp where
+  islandsL = lens chIslands (\x y -> x {chIslands = y})
+
+
 parseProgram :: (HasBasicInfo env, HasLogFunc env, HasAST env) => RIO env ()
 parseProgram = do
   logDebug "Stage: Parsing program"
@@ -100,7 +109,6 @@ parseProgram = do
       parseMode = defaultParseMode {parseFilename = filePath}
   case pResult of
     ParseOk hModule -> do
-      logInfo "Parsing Success"
       astHandle <- view astL
       writeIORef astHandle (Just hModule)
     ParseFailed srcLoc message ->
@@ -124,12 +132,9 @@ plan = do
     then logInfo "Program is well typed"
     else do
       runMarco
-      msss <- readIORefFromLens mssesL
-      constraints <- readIORefFromLens constraintsL
-      let mcss = map (constraints \\)  msss
-      -- forM_ mcss (logInfo . displayShow . map cstId)
+      generateMCSs
+      searchIslands
       report
-
   ---------------------------------------------
 
 main :: IO ()
@@ -150,6 +155,9 @@ main = do
     emptyMarcoMap <- newIORef []
     emptyMUSes <- newIORef []
     emptyMSSes <- newIORef []
+    emptyMCSes <- newIORef []
+    emptyIslands <- newIORef []
+
     let chApp =
           ChasmApp
             { chLogFunc = lf,
@@ -167,6 +175,8 @@ main = do
               chMarcoSeed = emptyMarcoSeed,
               chMarcoMap = emptyMarcoMap,
               chMUSes = emptyMUSes,
-              chMSSes = emptyMSSes
+              chMSSes = emptyMSSes,
+              chMCSes = emptyMCSes,
+              chIslands = emptyIslands
             }
     runRIO chApp plan

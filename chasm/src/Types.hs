@@ -1,9 +1,12 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Types where
 
 import Language.Haskell.Exts
 import Language.Prolog (Term)
+import Data.Aeson
 import RIO
 
 data Range = Global | Scoped SrcSpan deriving (Show)
@@ -43,6 +46,20 @@ data Constraint = Constraint
     cstBody :: Term,
     cstLoc :: SrcSpan
   } deriving (Show)
+
+instance ToJSON SrcSpan where
+  toJSON (SrcSpan _ startL startC endL endC) =
+    object [
+    "from" .= (startL, startC),
+    "to" .= (endL, endC)
+           ]
+
+instance ToJSON Constraint where
+  toJSON (Constraint cId cHead cBody cLoc) =
+    object [
+      "id" .= cId,
+      "loc" .= cLoc
+           ]
 
 instance Eq Constraint where
   c1 == c2 = cstId c1 == cstId c2

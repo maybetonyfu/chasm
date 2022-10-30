@@ -35,7 +35,6 @@ addSlices range names = do
 
 instance Sliceable Module where
   makeSlices _ (Module _ _ _ _ decls) = do
-    logInfo "Module"
     mapM_ (makeSlices global) decls
   makeSlices _ _ = error "Not a module"
 

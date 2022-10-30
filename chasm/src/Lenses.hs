@@ -49,6 +49,13 @@ class HasMUSs a where
 class HasMSSs a where
   mssesL :: Lens' a (IORef [[Constraint]])
 
+class HasMCSs a where
+  mcsesL :: Lens' a (IORef [[Constraint]])
+
+class HasIslands a where
+  islandsL :: Lens' a (IORef [[Int]])
+
+
 readIORefFromLens :: Lens' env (IORef b) -> RIO env b
 readIORefFromLens l = do
   handle <- view l

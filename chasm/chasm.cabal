@@ -30,6 +30,7 @@ library
       Namable
       Plan
       Range
+      Report
       Slice
       Types
       Typing
