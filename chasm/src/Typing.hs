@@ -51,7 +51,7 @@ assignQualVar m v = do
     Just slice -> do
       let vId = show (slId slice)
       let vMod = T.unpack (slModuleName slice)
-      return $ "typeof" ++ normModName vMod ++ "_" ++ v ++ "_" ++ vId
+      return $ "typeof_" ++ normModName vMod ++ "_" ++ v ++ "_" ++ vId
 
 addCstr :: (HasConstraintCounter env, HasConstraints env) => String -> Term -> SrcSpanInfo -> RIO env ()
 addCstr head body loc = do
@@ -87,7 +87,7 @@ instance HasTyping Decl where
     mapM_
       ( \name -> do
           h <- assignVar srcspan (getSingleName name)
-          addCstr h (eq varHead typeTerm) srcspan
+          addCstr h (eq varHead typeTerm) (ann htype)
       )
       names
   matchTerm _ (FunBind srcspan matches@(match : _)) = do
@@ -160,7 +160,7 @@ instance HasTyping Match where
     vargs <- mapM matchArg pats
     vrhs <- fresh
     matchTerm (h, vrhs) rhs
-    addCstr h (eq t (functionFrom (vargs ++ [vrhs]))) srcspan
+    addCstr h (eq t (functionFrom (vargs ++ [vrhs]))) (ann name)
   matchTerm ht (InfixMatch srcInfo pat name pats rhs maybeWheres) =
     matchTerm ht (Match srcInfo name (pat : pats) rhs maybeWheres)
 
@@ -235,7 +235,7 @@ constraintFromDrop loads mname (vname, vtype) = do
     Nothing -> return ()
     Just loc -> do
      v <- assignQualVar (T.unpack mname) (T.unpack vname)
-     addCstr (mconcat ["typeof_", v]) (eq varHead term) loc
+     addCstr v (eq varHead term) loc
 
 findLoadLocation :: [Load] -> Text -> Text -> Maybe SrcSpanInfo
 findLoadLocation loads mname vname =

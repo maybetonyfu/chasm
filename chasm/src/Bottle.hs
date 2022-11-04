@@ -131,7 +131,7 @@ parseHeadAndBody (head, body) =
       bodyR = P.parse parseCompilerMessageBody "" body
    in case (headR, bodyR) of
         (Left _, _) -> error "Cannot parse head"
-        (_, Left _) -> error "Cannot parse head"
+        (Right (head1, head2), Left _) -> Bottle head1 (T.unpack head2) []
         (Right (head1, head2), Right bs) ->
           Bottle
             { bottleName = head1,
