@@ -165,7 +165,8 @@ main = do
           ChasmApp
             { chLogFunc = lf,
               chProcessContext = processContext,
-              chBasicInfo = ("c:/Users/sfuu0016/Projects/chasm-example", "Test.hs"),
+              -- chBasicInfo = ("c:/Users/sfuu0016/Projects/chasm-example", "Test.hs"),
+              chBasicInfo = ("/home/tony/Projects/haskell-example", "Test.hs"),
               chTargetName = fallbackTargetName,
               chAST = emptyAST,
               chLoad = emptyLoad,
