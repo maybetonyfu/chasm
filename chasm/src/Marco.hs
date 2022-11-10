@@ -18,9 +18,11 @@ data MarcoState = Marco
     mcMsses :: [[Constraint]]
   }
 
-shrink ::(HasLogFunc env, HasConstraints env) => [Constraint] -> RIO env [Constraint]
-shrink [] = error "A satisifiable seed is provided to the 'shrink' function"
-shrink seed = do
+
+shrink ::(HasLogFunc env, HasConstraints env) => [Constraint] -> [Int] -> RIO env [Constraint]
+shrink constraints [] = error "A satisifiable seed is provided to the 'shrink' function"
+shrink constraints seed' = do
+  let seed = filter ((`elem` seed').  cstId) constraints
   let test c = do
         isUnsat <- fmap not (sat (delete c seed))
         if isUnsat then return (Just (delete c seed)) else return Nothing
@@ -28,11 +30,12 @@ shrink seed = do
   let possibleNextSeeds = catMaybes mbNextSeed
   case possibleNextSeeds of
     [] -> return seed
-    (nextSeed:_) -> shrink nextSeed
+    (nextSeed:_) -> shrink constraints (map cstId nextSeed)
 
-grow :: (HasLogFunc env, HasConstraints env) => [Constraint] -> [Constraint] -> RIO env [Constraint]
-grow constraints seed = do
-  let rest = constraints \\ seed
+grow :: (HasLogFunc env, HasConstraints env) => [Constraint] -> [Int] -> RIO env [Constraint]
+grow constraints seed' = do
+  let seed = filter ((`elem` seed').  cstId) constraints
+  let rest = filter ((`notElem` seed').  cstId) constraints
   let go c = do
         isSat <- sat (c:seed)
         if isSat then return (Just (c:seed)) else return Nothing
@@ -40,7 +43,7 @@ grow constraints seed = do
   let possibleNextSeeds = catMaybes mbNextSeed
   case possibleNextSeeds of
     [] -> return seed
-    (nextSeed:_) -> grow constraints nextSeed
+    (nextSeed:_) -> grow constraints (map cstId nextSeed)
 
 runMarco :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMUSs env, HasMSSs env) => RIO env ()
 runMarco = do
@@ -68,6 +71,7 @@ runMarco = do
 marco :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMUSs env, HasMSSs env) => RIO env ()
 marco = do
   marcoMap <- readIORefFromLens marcoMapL
+  constraints <- readIORefFromLens constraintsL
   let marcoMapSat = satisfiable (All marcoMap)
   if not marcoMapSat
     then do
@@ -75,12 +79,12 @@ marco = do
       return ()
     else do
       seed <- getUnexplored
-      isSat <- sat seed
+      isSat <- sat (filter ((`elem` seed) . cstId) constraints)
       if isSat
         then marcoMSS seed >> marco
         else marcoMUS seed >> marco
 
-marcoMSS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMSSs env) => [Constraint] -> RIO env ()
+marcoMSS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMSSs env) => [Int] -> RIO env ()
 marcoMSS seed = do
   constraints <- readIORefFromLens constraintsL
   mss <- grow constraints seed
@@ -97,9 +101,10 @@ marcoMSS seed = do
   modifyIORef mssHandle (mss:)
 
 
-marcoMUS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMUSs env) => [Constraint] -> RIO env ()
+marcoMUS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMUSs env) => [Int] -> RIO env ()
 marcoMUS seed = do
-  mus <- shrink seed
+  constraints <- readIORefFromLens constraintsL
+  mus <- shrink constraints seed
   -- logInfo "\nFound MUS:"
   -- logInfo . displayShow . map cstId $ mus
 
@@ -111,14 +116,21 @@ marcoMUS seed = do
   musHandle <- view musesL
   modifyIORef musHandle (mus:)
 
-getUnexplored ::  (HasLogFunc env, HasConstraints env, HasMarcoMap env) => RIO env [Constraint]
+getUnexplored ::  (HasLogFunc env, HasConstraints env, HasMarcoMap env) => RIO env [Int]
 getUnexplored = do
   marcoMap <- readIORefFromLens marcoMapL
   constraints <- readIORefFromLens constraintsL
-  let assignments = solve (All marcoMap)
-  case assignments of
-    Nothing -> error "solve after satisfiable check should never fail"
-    Just m -> do
-      let assignmentList = M.toList m
-      let ids = map fst . filter snd $ assignmentList
-      return $ filter (\c -> cstId c `elem` ids) constraints
+  if null marcoMap
+    then return (nub (map cstId constraints))
+    else do
+      let assignments = take 10 (solve_all (All marcoMap))
+      let countTruthy x = length (filter (==True) (M.elems x))
+      let compareTruthy a b = compare (countTruthy a) (countTruthy b)
+      let preferTruthyAssignm = maximumByMaybe compareTruthy assignments
+      case preferTruthyAssignm of
+        Nothing -> error "solve after satisfiable check should never fail"
+        Just m -> do
+          let assignmentList = M.toList m
+          let ids = map fst . filter snd $ assignmentList
+          return ids
+

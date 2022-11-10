@@ -55,3 +55,6 @@ real	0m9.014s
 user	0m8.807s
 sys	0m0.207s
 ```
+
+## Modifications
+Seed needs to be a list of Int, and some constraints may have duplicated ids. This is to make some constraints "bundled" together, the "bundled" constraints need to be able to add to the set and remove from it atomically. 

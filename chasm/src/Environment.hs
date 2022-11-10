@@ -36,7 +36,7 @@ data ChasmApp = ChasmApp
     chTypeVarCounter   :: IORef Int,
     chConstraintConter :: IORef Int,
     chConstraints      :: IORef [Constraint],
-    chMarcoSeed        :: IORef [Constraint],
+    chMarcoSeed        :: IORef [Int],
     chMarcoMap         :: IORef [Formula Int],
     chMUSes            :: IORef [[Constraint]],
     chMSSes            :: IORef [[Constraint]],
@@ -80,8 +80,8 @@ instance HasConstraintCounter ChasmApp where
 instance HasConstraints ChasmApp where
   constraintsL = lens chConstraints (\x y -> x {chConstraints = y})
 
-instance HasMarcoSeed ChasmApp where
-  marcoSeedL = lens chMarcoSeed (\x y -> x {chMarcoSeed = y})
+-- instance HasMarcoSeed ChasmApp where
+--   marcoSeedL = lens chMarcoSeed (\x y -> x {chMarcoSeed = y})
 
 instance HasMarcoMap ChasmApp where
   marcoMapL = lens chMarcoMap (\x y -> x {chMarcoMap = y})
@@ -127,7 +127,9 @@ plan = do
   constraintsFromBottles --constraints
   constraintsFromCurrentModule --constraints
 
-  -- constraints <- readIORefFromLens constraintsL
+  constraints <- readIORefFromLens constraintsL
+  clauses <- generateClauses constraints
+  forM_ clauses (logInfo . display . simplifyShow)
   -- forM_ constraints (logInfo . displayShow)
   ------Analysis Phases------------------------
   isWellTyped <- wellTyped

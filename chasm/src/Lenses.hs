@@ -38,7 +38,7 @@ class HasConstraints a where
   constraintsL :: Lens' a (IORef [Constraint])
 
 class HasMarcoSeed a where
-  marcoSeedL :: Lens' a (IORef [Constraint])
+  marcoSeedL :: Lens' a (IORef [Int])
 
 class HasMarcoMap a where
   marcoMapL :: Lens' a (IORef [Formula Int])
@@ -54,7 +54,6 @@ class HasMCSs a where
 
 class HasIslands a where
   islandsL :: Lens' a (IORef [[Int]])
-
 
 readIORefFromLens :: Lens' env (IORef b) -> RIO env b
 readIORefFromLens l = do

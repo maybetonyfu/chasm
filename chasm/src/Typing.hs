@@ -53,6 +53,13 @@ assignQualVar m v = do
       let vMod = T.unpack (slModuleName slice)
       return $ "typeof_" ++ normModName vMod ++ "_" ++ v ++ "_" ++ vId
 
+addCstrWithId :: (HasConstraints env, HasConstraintCounter env) => Maybe Int -> String -> Term -> SrcSpanInfo -> RIO env ()
+addCstrWithId Nothing head body loc = addCstr head body loc
+addCstrWithId (Just n) head body loc = do
+  constraintsHandle <- view constraintsL
+  let constraint = Constraint n head body (srcInfoSpan loc)
+  modifyIORef constraintsHandle (constraint :)
+
 addCstr :: (HasConstraintCounter env, HasConstraints env) => String -> Term -> SrcSpanInfo -> RIO env ()
 addCstr head body loc = do
   constraintCounterHandle <- view constraintCounterL
@@ -62,6 +69,13 @@ addCstr head body loc = do
   modifyIORef constraintsHandle (constraint :)
   modifyIORef constraintCounterHandle (+ 1)
 
+newCstrId :: (HasConstraintCounter env) => RIO env Int
+newCstrId = do
+  constraintCounterHandle <- view constraintCounterL
+  newId <- readIORef constraintCounterHandle
+  modifyIORef constraintCounterHandle (+ 1)
+  return newId
+
 class HasTyping f where
   matchTerm ::
     ( HasLogFunc env,
@@ -70,105 +84,114 @@ class HasTyping f where
       HasConstraintCounter env,
       HasConstraints env
     ) =>
-    (String, Term) ->
+    (String, Term, Int) ->
     f SrcSpanInfo ->
     RIO env ()
 
 instance HasTyping Module where
-  matchTerm t (Module _ _ _ _ decls) = mapM_ (matchTerm t) decls
-  matchTerm _ _ = undefined
+  matchTerm (h, t, n) (Module _ _ _ _ decls) = mapM_ (matchTerm (h,t, n)) decls
+  matchTerm _ _ = error "Not a module"
 
 instance HasTyping Decl where
-  matchTerm (_, t) (PatBind srcspan (PVar _ name) rhs maybeWheres) = do
+  matchTerm (_, t, n) (PatBind srcspan (PVar _ name) rhs maybeWheres) = do
     h <- assignVar srcspan (getSingleName name)
-    matchTerm (h, varHead) rhs
-  matchTerm (_, t) (TypeSig srcspan names htype) = do
+    matchTerm (h, varHead, n) rhs
+
+  matchTerm (_, t, n) (TypeSig srcspan names htype) = do
     let typeTerm = typeToTerm htype
     mapM_
       ( \name -> do
           h <- assignVar srcspan (getSingleName name)
-          addCstr h (eq varHead typeTerm) (ann htype)
+          cstId <- newCstrId
+          addCstrWithId (Just cstId) h (eq varHead typeTerm) (ann htype)
       )
       names
-  matchTerm _ (FunBind srcspan matches@(match : _)) = do
+  matchTerm (_, t, n) (FunBind srcspan matches@(match : _)) = do
     let (Match _ name _ _ _) = match
     h <- assignVar srcspan (getSingleName name)
-    mapM_ (matchTerm (h, varHead)) matches
+    mapM_ (matchTerm (h, varHead, n)) matches
   matchTerm _ node = error ("Node type not support: " ++ show node)
 
 instance HasTyping Pat where
   -- matchTerm (h, t) (PVar srcspan name) = retrun ()
-  -- matchTerm t (PInfixApp _ p1 op p2) = return ()
-
-  matchTerm (h, t) (PApp srcspan (UnQual _ (Ident _ "True")) []) = addCstr h (eq t (atomFrom "haskell_Bool")) srcspan
-  matchTerm (h, t) (PApp srcspan (UnQual _ (Ident _ "False")) []) = addCstr h (eq t (atomFrom "haskell_Bool")) srcspan
-  -- matchTerm t (PApp _ _ pats) = do
-  --   return ()
+  -- matchTerm t (PIgnfixApp _ p1 op p2) = return ()
+  -- matchTerm t (PApp _ _ pats) = return ()
   -- matchTerm t (PTuple _ _ ps) = return ()
   -- matchTerm t (PList _ ps) = return ()
-  matchTerm (h, t) (PParen _ p) = matchTerm (h, t) p
   -- matchTerm t (PAsPat _ name p) = return ()
-  matchTerm (h, t) (PLit _ _ l) = matchTerm (h, t) l
-  matchTerm t PWildCard {} = return ()
-  matchTerm t node = error $ "Node type not supported: " ++ show node
+  matchTerm (h, t, n) (PApp srcspan (UnQual _ (Ident _ "True")) []) = do
+    newId <- newCstrId
+    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Bool")) srcspan
+  matchTerm (h, t, n) (PApp srcspan (UnQual _ (Ident _ "False")) []) = do
+    newId <- newCstrId
+    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Bool")) srcspan
+  matchTerm (h, t, n) (PParen _ p) = matchTerm (h, t, n) p
+  matchTerm (h, t, n) (PLit _ _ l) = matchTerm (h, t, n) l
+  matchTerm _ PWildCard {} = return ()
+  matchTerm _ node = error $ "Node type not supported: " ++ show node
 
 instance HasTyping Rhs where
-  matchTerm ht (UnGuardedRhs srcspan exp) = matchTerm ht exp
-  matchTerm t node = error ("Node type not support: " ++ show node)
+  matchTerm (h, t, n) (UnGuardedRhs srcspan exp) = matchTerm (h, t, n) exp
+  matchTerm _ node = error ("Node type not support: " ++ show node)
 
 instance HasTyping Exp where
-  -- matchTerm term (InfixApp srcspan e1 op e2) = do
-  --   return ()
-  -- matchTerm term (App srcspan e1 e2) = do
-  --   return ()
-  -- matchTerm term (NegApp srcspan e) = do
-  --   return ()
-  -- matchTerm term (Lambda srcspan pats e) = do
-  --   return ()
-  -- matchTerm term (Let srcspan bind e) = do
-  --   return ()
-  -- matchTerm term (If srcspan e1 e2 e3) = do
-  --   return ()
-  -- matchTerm term (Case srcspan exp alts) = do
-  --   return ()
-  -- matchTerm term (Tuple srcspan _ exps) = do
-  --   return ()
-  -- matchTerm term (List srcspan exps) = do
-  --   return ()
-  matchTerm (h, t) (Paren srcspan e) = matchTerm (h, t) e
-  -- matchTerm term (LeftSection srcspan e _) = do
-  --   return ()
-  -- matchTerm term (RightSection srcspan _ e) = do
-  --   return ()
-  matchTerm (h, t) (Con srcspan (UnQual _ (Ident _ "True"))) = addCstr h (eq t (atomFrom "haskell_Bool")) srcspan
-  matchTerm (h, t) (Con srcspan (UnQual _ (Ident _ "False"))) = addCstr h (eq t (atomFrom "haskell_Bool")) srcspan
-  matchTerm ht (Lit srcspan l) = matchTerm ht l
-  matchTerm (h, t) (Var srcspan (Qual _ (ModuleName _ mname) varname)) = do
+  -- matchTerm term (InfixApp srcspan e1 op e2) = return ()
+  -- matchTerm term (App srcspan e1 e2) =  return ()
+  -- matchTerm term (NegApp srcspan e) =  return ()
+  -- matchTerm term (Lambda srcspan pats e) =  return ()
+  -- matchTerm term (Let srcspan bind e) =  return ()
+  -- matchTerm term (If srcspan e1 e2 e3) =  return ()
+  -- matchTerm term (Case srcspan exp alts) = return ()
+  -- matchTerm term (Tuple srcspan _ exps) =  return ()
+  -- matchTerm term (List srcspan exps) =  return ()
+  -- matchTerm term (LeftSection srcspan e _) =  return ()
+  -- matchTerm term (RightSection srcspan _ e) =  return ()
+  matchTerm (h, t, n) (Paren srcspan e) = matchTerm (h, t, n) e
+  matchTerm (h, t, n) (Con srcspan (UnQual _ (Ident _ "True"))) = do
+    newId <- newCstrId
+    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Bool")) srcspan
+  matchTerm (h, t, n) (Con srcspan (UnQual _ (Ident _ "False"))) = do
+    newId <- newCstrId
+    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Bool")) srcspan
+  matchTerm (h, t, n) (Lit srcspan l) = matchTerm (h, t, n) l
+  matchTerm (h, t, n) (Var srcspan (Qual _ (ModuleName _ mname) varname)) = do
     vname <- assignQualVar mname (getSingleName varname)
-    addCstr h (typeOf vname t) srcspan
-  matchTerm (h, t) (Var _ (UnQual srcspan varname)) = do
+    newId <- newCstrId
+    addCstrWithId (Just newId) h (typeOf vname t) srcspan
+  matchTerm (h, t, n) (Var _ (UnQual srcspan varname)) = do
     vname <- assignVar srcspan (getSingleName varname)
-    addCstr h (typeOf vname t) srcspan
-  matchTerm term node = error ("Node type not support: " ++ show node)
+    newId <- newCstrId
+    addCstrWithId (Just newId) h (typeOf vname t) srcspan
+  matchTerm _ node = error ("Node type not support: " ++ show node)
 
 instance HasTyping Match where
-  matchTerm (h, t) (Match srcspan name pats rhs maybeWheres) = do
+  matchTerm (h, t, n) (Match srcspan name pats rhs maybeWheres) = do
     let matchArg pat = do
           v <- fresh
-          matchTerm (h, v) pat
+          matchTerm (h, v, n) pat
           return v
     vargs <- mapM matchArg pats
     vrhs <- fresh
-    matchTerm (h, vrhs) rhs
-    addCstr h (eq t (functionFrom (vargs ++ [vrhs]))) (ann name)
-  matchTerm ht (InfixMatch srcInfo pat name pats rhs maybeWheres) =
-    matchTerm ht (Match srcInfo name (pat : pats) rhs maybeWheres)
+    matchTerm (h, vrhs, n) rhs
+    newId <- newCstrId
+    addCstrWithId (Just newId) h (eq t (functionFrom (vargs ++ [vrhs]))) (ann name)
+
+  matchTerm htn (InfixMatch srcInfo pat name pats rhs maybeWheres) =
+    matchTerm htn (Match srcInfo name (pat : pats) rhs maybeWheres)
 
 instance HasTyping Literal where
-  matchTerm (h, t) (Char srcspan _ _) = addCstr h (eq t (atomFrom "haskell_Char")) srcspan
-  matchTerm (h, t) (String srcspan _ _) = addCstr h (eq t (atomFrom "haskell_String")) srcspan
-  matchTerm (h, t) (Int srcspan _ _) = addCstr h (eq t (atomFrom "haskell_Int")) srcspan
-  matchTerm (h, t) (Frac srcspan _ _) = addCstr h (eq t (atomFrom "haskell_Float")) srcspan
+  matchTerm (h, t, n) (Char srcspan _ _) = do
+    newId <- newCstrId
+    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Char")) srcspan
+  matchTerm (h, t, n) (String srcspan _ _) = do
+    newId <- newCstrId
+    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_String")) srcspan
+  matchTerm (h, t, n) (Int srcspan _ _) = do
+    newId <- newCstrId
+    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Int")) srcspan
+  matchTerm (h, t, n) (Frac srcspan _ _) = do
+    newId <- newCstrId
+    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Float")) srcspan
   matchTerm _ node = error ("Node type not support: " ++ show node)
 
 constraintsFromCurrentModule ::
@@ -186,7 +209,7 @@ constraintsFromCurrentModule = do
   case mbAst of
     Nothing -> error "Load constraints started before ast is ready"
     Just ast -> do
-      matchTerm ("", unit) ast
+      matchTerm ("", unit, -1) ast
 
 constraintsFromBottles ::
   ( HasLogFunc env,
@@ -235,7 +258,8 @@ constraintFromDrop loads mname (vname, vtype) = do
     Nothing -> return ()
     Just loc -> do
      v <- assignQualVar (T.unpack mname) (T.unpack vname)
-     addCstr v (eq varHead term) loc
+     newId <- newCstrId
+     addCstrWithId (Just newId) v (eq varHead term) loc
 
 findLoadLocation :: [Load] -> Text -> Text -> Maybe SrcSpanInfo
 findLoadLocation loads mname vname =
