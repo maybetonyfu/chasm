@@ -58,6 +58,8 @@ sat :: (HasLogFunc env, HasConstraints env) => [Constraint] -> RIO env Bool
 sat constraints = do
   clauses <- generateClauses constraints
   goals  <- generateGoals
+  -- logInfo "\n----->Testing clause:"
+  -- forM_ clauses (logInfo . display . simplifyShow)
   results <-withRunInIO $ \run -> do
     resolve clauses goals
   return (not $ null results)

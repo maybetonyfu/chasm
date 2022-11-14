@@ -1,47 +1,47 @@
-{-# LANGUAGE NoImplicitPrelude   #-}
-{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 
 module Environment where
 
-import           Analysis
-import           Bottle
-import           Data.Aeson            (Result (Success))
-import           Goal
-import           Language.Haskell.Exts
-import           Lenses
-import           Load
-import           Marco
-import           Range
-import           Report
-import           RIO
-import           RIO.FilePath
-import           RIO.Process
-import qualified RIO.Text              as T
-import           SAT.MiniSat           (Formula)
-import           Slice
-import           Types
-import           Typing
+import Analysis
+import Bottle
+import Data.Aeson (Result (Success))
+import Goal
+import Language.Haskell.Exts
+import Lenses
+import Load
+import Marco
+import RIO
+import RIO.FilePath
+import RIO.Process
+import qualified RIO.Text as T
+import Range
+import Report
+import SAT.MiniSat (Formula)
+import Slice
+import Types
+import Typing
 
 data ChasmApp = ChasmApp
-  { chLogFunc          :: !LogFunc,
-    chProcessContext   :: ProcessContext,
-    chBasicInfo        :: BasicInfo,
-    chTargetName       :: IORef Text,
-    chAST              :: IORef (Maybe (Module SrcSpanInfo)),
-    chLoad             :: IORef [Load],
-    chBottles          :: IORef [Bottle],
-    chSliceCounter     :: IORef Int,
-    chSlices           :: IORef [Slice],
-    chTypeVarCounter   :: IORef Int,
+  { chLogFunc :: !LogFunc,
+    chProcessContext :: ProcessContext,
+    chBasicInfo :: BasicInfo,
+    chTargetName :: IORef Text,
+    chAST :: IORef (Maybe (Module SrcSpanInfo)),
+    chLoad :: IORef [Load],
+    chBottles :: IORef [Bottle],
+    chSliceCounter :: IORef Int,
+    chSlices :: IORef [Slice],
+    chTypeVarCounter :: IORef Int,
     chConstraintConter :: IORef Int,
-    chConstraints      :: IORef [Constraint],
-    chMarcoSeed        :: IORef [Int],
-    chMarcoMap         :: IORef [Formula Int],
-    chMUSes            :: IORef [[Constraint]],
-    chMSSes            :: IORef [[Constraint]],
-    chMCSes            :: IORef [[Constraint]],
-    chIslands          :: IORef [[Int]]
+    chConstraints :: IORef [Constraint],
+    chMarcoSeed :: IORef [Int],
+    chMarcoMap :: IORef [Formula Int],
+    chMUSes :: IORef [[Constraint]],
+    chMSSes :: IORef [[Constraint]],
+    chMCSes :: IORef [[Constraint]],
+    chIslands :: IORef [[Int]]
   }
 
 instance HasLogFunc ChasmApp where
@@ -98,7 +98,6 @@ instance HasMCSs ChasmApp where
 instance HasIslands ChasmApp where
   islandsL = lens chIslands (\x y -> x {chIslands = y})
 
-
 parseProgram :: (HasBasicInfo env, HasLogFunc env, HasAST env) => RIO env ()
 parseProgram = do
   logDebug "Stage: Parsing program"
@@ -119,28 +118,26 @@ plan = do
   -----Preperation Phases----------------------
   parseProgram -- ast
   analyzeImports -- load, targetName
-
   loadBottles -- bottles
   loadSlicesCurrentModule -- slices
   loadSlicesFromBottles -- slices
-
-  constraintsFromBottles --constraints
-  constraintsFromCurrentModule --constraints
-
+  constraintsFromBottles -- constraints
+  constraintsFromCurrentModule -- constraints
   constraints <- readIORefFromLens constraintsL
-  clauses <- generateClauses constraints
-  forM_ clauses (logInfo . display . simplifyShow)
-  -- forM_ constraints (logInfo . displayShow)
+  -- clauses <- generateClauses constraints
+  -- forM_ clauses (logInfo . display . simplifyShow)
+  forM_ constraints (logInfo . displayShow)
   ------Analysis Phases------------------------
   isWellTyped <- wellTyped
   if isWellTyped
     then logInfo "Program is well typed"
     else do
+      logInfo "Done"
       runMarco
       -- generateMCSs
       -- searchIslands
       -- report
-  ---------------------------------------------
+---------------------------------------------
 
 main :: IO ()
 main = do

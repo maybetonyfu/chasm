@@ -53,21 +53,20 @@ assignQualVar m v = do
       let vMod = T.unpack (slModuleName slice)
       return $ "typeof_" ++ normModName vMod ++ "_" ++ v ++ "_" ++ vId
 
-addCstrWithId :: (HasConstraints env, HasConstraintCounter env) => Maybe Int -> String -> Term -> SrcSpanInfo -> RIO env ()
-addCstrWithId Nothing head body loc = addCstr head body loc
-addCstrWithId (Just n) head body loc = do
+addCstrWithId :: (HasConstraints env, HasConstraintCounter env) => Int -> String -> Term -> SrcSpanInfo -> RIO env ()
+addCstrWithId n head body loc = do
   constraintsHandle <- view constraintsL
   let constraint = Constraint n head body (srcInfoSpan loc)
   modifyIORef constraintsHandle (constraint :)
 
-addCstr :: (HasConstraintCounter env, HasConstraints env) => String -> Term -> SrcSpanInfo -> RIO env ()
-addCstr head body loc = do
-  constraintCounterHandle <- view constraintCounterL
-  constraintsHandle <- view constraintsL
-  count <- readIORef constraintCounterHandle
-  let constraint = Constraint count head body (srcInfoSpan loc)
-  modifyIORef constraintsHandle (constraint :)
-  modifyIORef constraintCounterHandle (+ 1)
+-- addCstr :: (HasConstraintCounter env, HasConstraints env) => String -> Term -> SrcSpanInfo -> RIO env ()
+-- addCstr head body loc = do
+--   constraintCounterHandle <- view constraintCounterL
+--   constraintsHandle <- view constraintsL
+--   count <- readIORef constraintCounterHandle
+--   let constraint = Constraint count head body (srcInfoSpan loc)
+--   modifyIORef constraintsHandle (constraint :)
+--   modifyIORef constraintCounterHandle (+ 1)
 
 newCstrId :: (HasConstraintCounter env) => RIO env Int
 newCstrId = do
@@ -89,21 +88,20 @@ class HasTyping f where
     RIO env ()
 
 instance HasTyping Module where
-  matchTerm (h, t, n) (Module _ _ _ _ decls) = mapM_ (matchTerm (h,t, n)) decls
+  matchTerm (h, t, n) (Module _ _ _ _ decls) = mapM_ (matchTerm (h, t, n)) decls
   matchTerm _ _ = error "Not a module"
 
 instance HasTyping Decl where
   matchTerm (_, t, n) (PatBind srcspan (PVar _ name) rhs maybeWheres) = do
     h <- assignVar srcspan (getSingleName name)
     matchTerm (h, varHead, n) rhs
-
   matchTerm (_, t, n) (TypeSig srcspan names htype) = do
     let typeTerm = typeToTerm htype
     mapM_
       ( \name -> do
           h <- assignVar srcspan (getSingleName name)
-          cstId <- newCstrId
-          addCstrWithId (Just cstId) h (eq varHead typeTerm) (ann htype)
+          newId <- newCstrId
+          addCstrWithId newId h (eq varHead typeTerm) (ann htype)
       )
       names
   matchTerm (_, t, n) (FunBind srcspan matches@(match : _)) = do
@@ -120,11 +118,11 @@ instance HasTyping Pat where
   -- matchTerm t (PList _ ps) = return ()
   -- matchTerm t (PAsPat _ name p) = return ()
   matchTerm (h, t, n) (PApp srcspan (UnQual _ (Ident _ "True")) []) = do
-    newId <- newCstrId
-    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Bool")) srcspan
+    --    newId <- newCstrId
+    addCstrWithId n h (eq t (atomFrom "haskell_Bool")) srcspan
   matchTerm (h, t, n) (PApp srcspan (UnQual _ (Ident _ "False")) []) = do
     newId <- newCstrId
-    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Bool")) srcspan
+    addCstrWithId n h (eq t (atomFrom "haskell_Bool")) srcspan
   matchTerm (h, t, n) (PParen _ p) = matchTerm (h, t, n) p
   matchTerm (h, t, n) (PLit _ _ l) = matchTerm (h, t, n) l
   matchTerm _ PWildCard {} = return ()
@@ -149,49 +147,49 @@ instance HasTyping Exp where
   matchTerm (h, t, n) (Paren srcspan e) = matchTerm (h, t, n) e
   matchTerm (h, t, n) (Con srcspan (UnQual _ (Ident _ "True"))) = do
     newId <- newCstrId
-    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Bool")) srcspan
+    addCstrWithId newId h (eq t (atomFrom "haskell_Bool")) srcspan
   matchTerm (h, t, n) (Con srcspan (UnQual _ (Ident _ "False"))) = do
     newId <- newCstrId
-    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Bool")) srcspan
-  matchTerm (h, t, n) (Lit srcspan l) = matchTerm (h, t, n) l
+    addCstrWithId newId h (eq t (atomFrom "haskell_Bool")) srcspan
+  matchTerm (h, t, n) (Lit srcspan l) = do
+    newId <- newCstrId
+    matchTerm (h, t, newId) l
   matchTerm (h, t, n) (Var srcspan (Qual _ (ModuleName _ mname) varname)) = do
     vname <- assignQualVar mname (getSingleName varname)
     newId <- newCstrId
-    addCstrWithId (Just newId) h (typeOf vname t) srcspan
+    addCstrWithId newId h (typeOf vname t) srcspan
   matchTerm (h, t, n) (Var _ (UnQual srcspan varname)) = do
     vname <- assignVar srcspan (getSingleName varname)
     newId <- newCstrId
-    addCstrWithId (Just newId) h (typeOf vname t) srcspan
+    addCstrWithId newId h (typeOf vname t) srcspan
   matchTerm _ node = error ("Node type not support: " ++ show node)
 
 instance HasTyping Match where
   matchTerm (h, t, n) (Match srcspan name pats rhs maybeWheres) = do
-    let matchArg pat = do
-          v <- fresh
-          matchTerm (h, v, n) pat
-          return v
-    vargs <- mapM matchArg pats
+    let numberOfPats = length pats
+    argVars <- forM [0 .. numberOfPats] (const fresh)
+    branchConstId <- newCstrId
+    forM_
+      (zip argVars pats)
+      ( \(vId, pat) -> do
+          matchTerm (h, vId, branchConstId) pat
+      )
     vrhs <- fresh
     matchTerm (h, vrhs, n) rhs
-    newId <- newCstrId
-    addCstrWithId (Just newId) h (eq t (functionFrom (vargs ++ [vrhs]))) (ann name)
+    addCstrWithId branchConstId h (eq t (functionFrom (argVars ++ [vrhs]))) (ann name)
 
   matchTerm htn (InfixMatch srcInfo pat name pats rhs maybeWheres) =
     matchTerm htn (Match srcInfo name (pat : pats) rhs maybeWheres)
 
 instance HasTyping Literal where
   matchTerm (h, t, n) (Char srcspan _ _) = do
-    newId <- newCstrId
-    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Char")) srcspan
+    addCstrWithId n h (eq t (atomFrom "haskell_Char")) srcspan
   matchTerm (h, t, n) (String srcspan _ _) = do
-    newId <- newCstrId
-    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_String")) srcspan
+    addCstrWithId n h (eq t (atomFrom "haskell_String")) srcspan
   matchTerm (h, t, n) (Int srcspan _ _) = do
-    newId <- newCstrId
-    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Int")) srcspan
+    addCstrWithId n h (eq t (atomFrom "haskell_Int")) srcspan
   matchTerm (h, t, n) (Frac srcspan _ _) = do
-    newId <- newCstrId
-    addCstrWithId (Just newId) h (eq t (atomFrom "haskell_Float")) srcspan
+    addCstrWithId n h (eq t (atomFrom "haskell_Float")) srcspan
   matchTerm _ node = error ("Node type not support: " ++ show node)
 
 constraintsFromCurrentModule ::
@@ -237,8 +235,8 @@ constraintFromBottle ::
   [Load] ->
   Bottle ->
   RIO env ()
-constraintFromBottle loads (Bottle mname mpath drops)  = do
-  mapM_ (constraintFromDrop loads mname ) drops
+constraintFromBottle loads (Bottle mname mpath drops) = do
+  mapM_ (constraintFromDrop loads mname) drops
 
 constraintFromDrop ::
   ( HasLogFunc env,
@@ -257,16 +255,16 @@ constraintFromDrop loads mname (vname, vtype) = do
   case mbloc of
     Nothing -> return ()
     Just loc -> do
-     v <- assignQualVar (T.unpack mname) (T.unpack vname)
-     newId <- newCstrId
-     addCstrWithId (Just newId) v (eq varHead term) loc
+      v <- assignQualVar (T.unpack mname) (T.unpack vname)
+      newId <- newCstrId
+      addCstrWithId newId v (eq varHead term) loc
 
 findLoadLocation :: [Load] -> Text -> Text -> Maybe SrcSpanInfo
 findLoadLocation loads mname vname =
   let go (Load name loc _ _ Everything) = name == mname
       go (Load name loc _ _ (Inc vars)) = name == mname && vname `elem` vars
       go (Load name loc _ _ (Exc vars)) = name == mname && vname `notElem` vars
-  in fmap loadLoc (find go loads)
+   in fmap loadLoc (find go loads)
 
 typeToTerm :: Type SrcSpanInfo -> Term
 typeToTerm (TyVar _ name) = varFrom ("TVar_" ++ getSingleName name)

@@ -22,27 +22,39 @@ data MarcoState = Marco
 shrink ::(HasLogFunc env, HasConstraints env) => [Constraint] -> [Int] -> RIO env [Constraint]
 shrink constraints [] = error "A satisifiable seed is provided to the 'shrink' function"
 shrink constraints seed' = do
-  let seed = filter ((`elem` seed').  cstId) constraints
-  let test c = do
-        isUnsat <- fmap not (sat (delete c seed))
-        if isUnsat then return (Just (delete c seed)) else return Nothing
-  mbNextSeed <- mapM test seed
+  let seedUniq = nub seed'
+  let seedCons = filter ((`elem` seed').  cstId) constraints
+  let test cId = do
+        let newCons = filter ((/= cId) . cstId) seedCons
+        isUnsat <- fmap not (sat newCons)
+        if isUnsat then return (Just newCons) else return Nothing
+  mbNextSeed <- mapM test seedUniq
   let possibleNextSeeds = catMaybes mbNextSeed
   case possibleNextSeeds of
-    [] -> return seed
+    [] -> return seedCons
     (nextSeed:_) -> shrink constraints (map cstId nextSeed)
 
 grow :: (HasLogFunc env, HasConstraints env) => [Constraint] -> [Int] -> RIO env [Constraint]
 grow constraints seed' = do
-  let seed = filter ((`elem` seed').  cstId) constraints
-  let rest = filter ((`notElem` seed').  cstId) constraints
-  let go c = do
-        isSat <- sat (c:seed)
-        if isSat then return (Just (c:seed)) else return Nothing
-  mbNextSeed <- mapM go rest
+  -- logInfo "\n-->Growing:"
+  -- logInfo (displayShow seed')
+  let seedCons = filter ((`elem` seed').  cstId) constraints
+  let restIds = nub . map (cstId) . filter ((`notElem` seed').  cstId) $ constraints
+  -- logInfo "\n-->Seed:"
+  -- forM_ seed (logInfo . displayShow)
+  let go cId = do
+        let newCons = filter ((== cId) . cstId) constraints
+        isSat <- sat (newCons ++ seedCons)
+        if isSat
+          then return (Just (newCons ++ seedCons))
+          else return Nothing
+  mbNextSeed <- mapM go restIds
+  -- logInfo "\n-->Test sat:"
+  -- forM_ mbNextSeed (logInfo . displayShow)
+
   let possibleNextSeeds = catMaybes mbNextSeed
   case possibleNextSeeds of
-    [] -> return seed
+    [] -> return seedCons
     (nextSeed:_) -> grow constraints (map cstId nextSeed)
 
 runMarco :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMUSs env, HasMSSs env) => RIO env ()
@@ -61,7 +73,7 @@ runMarco = do
   --                       logInfo . display $ (num <> ": Head: " <> head <> ", Body: " <> body)
   --                       )
 
-  let constraintIds = map cstId constraints
+  let constraintIds = nub $  map cstId constraints
       formulas = map Var constraintIds
       tautologies = map (\f -> f :||: Not f) formulas
   marcoMapHandle <- view marcoMapL
@@ -75,7 +87,7 @@ marco = do
   let marcoMapSat = satisfiable (All marcoMap)
   if not marcoMapSat
     then do
-      -- logInfo "\nMarco map is no longer satisfiable. The search is over."
+      logInfo "\nMarco map is no longer satisfiable. The search is over."
       return ()
     else do
       seed <- getUnexplored
@@ -87,9 +99,9 @@ marco = do
 marcoMSS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMSSs env) => [Int] -> RIO env ()
 marcoMSS seed = do
   constraints <- readIORefFromLens constraintsL
-  mss <- grow constraints seed
-  -- logInfo "\nFound MSS:"
-  -- logInfo . displayShow . map cstId $ mss
+  mss <- fmap nub (grow constraints seed)
+  logInfo "\nFound MSS:"
+  logInfo . displayShow . map cstId $ mss
 
   let inverseConstraints = filter (`notElem` mss) constraints
   let inverseIds = map cstId inverseConstraints
@@ -105,14 +117,14 @@ marcoMUS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMUSs env) =
 marcoMUS seed = do
   constraints <- readIORefFromLens constraintsL
   mus <- shrink constraints seed
-  -- logInfo "\nFound MUS:"
-  -- logInfo . displayShow . map cstId $ mus
+  logInfo "\nFound MUS:"
+  logInfo . displayShow . map cstId $ mus
 
   let ids = map cstId mus
   let formula = Some (map (Not . Var) ids)
+
   marcoMapHandle <- view marcoMapL
   modifyIORef marcoMapHandle (formula:)
-
   musHandle <- view musesL
   modifyIORef musHandle (mus:)
 
