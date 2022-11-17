@@ -94,7 +94,8 @@ instance HasTyping Module where
 instance HasTyping Decl where
   matchTerm (_, t, n) (PatBind srcspan (PVar _ name) rhs maybeWheres) = do
     h <- assignVar srcspan (getSingleName name)
-    matchTerm (h, varHead, n) rhs
+    newId <- newCstrId
+    matchTerm (h, varHead, newId) rhs
   matchTerm (_, t, n) (TypeSig srcspan names htype) = do
     let typeTerm = typeToTerm htype
     mapM_
@@ -107,7 +108,8 @@ instance HasTyping Decl where
   matchTerm (_, t, n) (FunBind srcspan matches@(match : _)) = do
     let (Match _ name _ _ _) = match
     h <- assignVar srcspan (getSingleName name)
-    mapM_ (matchTerm (h, varHead, n)) matches
+    branchMatchCstId <- newCstrId
+    mapM_ (matchTerm (h, varHead, branchMatchCstId)) matches
   matchTerm _ node = error ("Node type not support: " ++ show node)
 
 instance HasTyping Pat where
@@ -146,14 +148,11 @@ instance HasTyping Exp where
   -- matchTerm term (RightSection srcspan _ e) =  return ()
   matchTerm (h, t, n) (Paren srcspan e) = matchTerm (h, t, n) e
   matchTerm (h, t, n) (Con srcspan (UnQual _ (Ident _ "True"))) = do
-    newId <- newCstrId
-    addCstrWithId newId h (eq t (atomFrom "haskell_Bool")) srcspan
+    addCstrWithId n h (eq t (atomFrom "haskell_Bool")) srcspan
   matchTerm (h, t, n) (Con srcspan (UnQual _ (Ident _ "False"))) = do
-    newId <- newCstrId
-    addCstrWithId newId h (eq t (atomFrom "haskell_Bool")) srcspan
+    addCstrWithId n h (eq t (atomFrom "haskell_Bool")) srcspan
   matchTerm (h, t, n) (Lit srcspan l) = do
-    newId <- newCstrId
-    matchTerm (h, t, newId) l
+    matchTerm (h, t, n) l
   matchTerm (h, t, n) (Var srcspan (Qual _ (ModuleName _ mname) varname)) = do
     vname <- assignQualVar mname (getSingleName varname)
     newId <- newCstrId
@@ -168,15 +167,16 @@ instance HasTyping Match where
   matchTerm (h, t, n) (Match srcspan name pats rhs maybeWheres) = do
     let numberOfPats = length pats
     argVars <- forM [0 .. numberOfPats] (const fresh)
-    branchConstId <- newCstrId
     forM_
       (zip argVars pats)
       ( \(vId, pat) -> do
-          matchTerm (h, vId, branchConstId) pat
+          varConstId <- newCstrId
+          matchTerm (h, vId, varConstId) pat
       )
     vrhs <- fresh
-    matchTerm (h, vrhs, n) rhs
-    addCstrWithId branchConstId h (eq t (functionFrom (argVars ++ [vrhs]))) (ann name)
+    rhsId <- newCstrId
+    matchTerm (h, vrhs, rhsId) rhs
+    addCstrWithId n h (eq t (functionFrom (argVars ++ [vrhs]))) (ann name)
 
   matchTerm htn (InfixMatch srcInfo pat name pats rhs maybeWheres) =
     matchTerm htn (Match srcInfo name (pat : pats) rhs maybeWheres)

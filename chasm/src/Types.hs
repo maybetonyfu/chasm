@@ -61,6 +61,6 @@ instance ToJSON Constraint where
       "loc" .= cLoc
            ]
 
-instance Eq Constraint where
-  c1 == c2 = cstId c1 == cstId c2
+-- instance Eq Constraint where
+--   c1 == c2 = cstId c1 == cstId c2
 

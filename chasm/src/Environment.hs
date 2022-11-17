@@ -41,7 +41,8 @@ data ChasmApp = ChasmApp
     chMUSes :: IORef [[Constraint]],
     chMSSes :: IORef [[Constraint]],
     chMCSes :: IORef [[Constraint]],
-    chIslands :: IORef [[Int]]
+    chIslands :: IORef [[Int]], -- MUS ID
+    chIslandsMCSes :: IORef [([[Int]], [[Int]])] -- [([[ConstraintID]], [[ConstraintId]])] | [([Fix], [Fix])] | [(Minimal, Extra)]
   }
 
 instance HasLogFunc ChasmApp where
@@ -79,8 +80,6 @@ instance HasConstraintCounter ChasmApp where
 
 instance HasConstraints ChasmApp where
   constraintsL = lens chConstraints (\x y -> x {chConstraints = y})
-
--- instance HasMarcoSeed ChasmApp where
 --   marcoSeedL = lens chMarcoSeed (\x y -> x {chMarcoSeed = y})
 
 instance HasMarcoMap ChasmApp where
@@ -97,6 +96,10 @@ instance HasMCSs ChasmApp where
 
 instance HasIslands ChasmApp where
   islandsL = lens chIslands (\x y -> x {chIslands = y})
+
+instance HasIslandsMCSes ChasmApp where
+  islandsMcsesL = lens chIslandsMCSes (\x y -> x {chIslandsMCSes = y})
+
 
 parseProgram :: (HasBasicInfo env, HasLogFunc env, HasAST env) => RIO env ()
 parseProgram = do
@@ -123,20 +126,21 @@ plan = do
   loadSlicesFromBottles -- slices
   constraintsFromBottles -- constraints
   constraintsFromCurrentModule -- constraints
-  constraints <- readIORefFromLens constraintsL
+  -- constraints <- readIORefFromLens constraintsL
   -- clauses <- generateClauses constraints
   -- forM_ clauses (logInfo . display . simplifyShow)
-  forM_ constraints (logInfo . displayShow)
+  -- forM_ constraints (logInfo . displayShow)
   ------Analysis Phases------------------------
   isWellTyped <- wellTyped
   if isWellTyped
     then logInfo "Program is well typed"
     else do
-      logInfo "Done"
+      -- logInfo "Done"
       runMarco
-      -- generateMCSs
-      -- searchIslands
-      -- report
+      generateMCSs
+      searchIslands
+      islandsMCSes
+      report
 ---------------------------------------------
 
 main :: IO ()
@@ -159,7 +163,7 @@ main = do
     emptyMSSes <- newIORef []
     emptyMCSes <- newIORef []
     emptyIslands <- newIORef []
-
+    emptyIslandsMCSes <- newIORef []
     let chApp =
           ChasmApp
             { chLogFunc = lf,
@@ -180,6 +184,7 @@ main = do
               chMUSes = emptyMUSes,
               chMSSes = emptyMSSes,
               chMCSes = emptyMCSes,
-              chIslands = emptyIslands
+              chIslands = emptyIslands,
+              chIslandsMCSes = emptyIslandsMCSes
             }
     runRIO chApp plan

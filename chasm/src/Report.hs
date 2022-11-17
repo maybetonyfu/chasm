@@ -14,28 +14,31 @@ data Report = Report
   {
     reportCons    :: [Constraint],
     reportMUS     :: [[Int]],
-    -- reportMSS :: [[Int]],
     reportMCS     :: [[Int]],
-    reportIslands :: [[Int]] }
+    reportIslands :: [[Int]],
+    reportIslandsMCS :: [([[Int]], [[Int]])]
+
+  }
 
 instance ToJSON Report where
-  toJSON (Report rCons rMus rMcs rIslds) =
+  toJSON (Report rCons rMus rMcs rIslds rIsldsMcs) =
     object [
       "constraints" .= rCons,
       "mus" .= rMus,
       -- "mss" .= rMss,
       "mcs" .= rMcs,
-      "islands" .= rIslds
+      "islands" .= rIslds,
+      "islandsFixes" .= rIsldsMcs
            ]
 
-report :: (HasLogFunc env, HasMUSs env, HasMSSs env, HasMCSs env, HasIslands env, HasConstraints env) => RIO env ()
+report :: (HasLogFunc env, HasMUSs env, HasMSSs env, HasMCSs env, HasIslands env, HasConstraints env, HasIslandsMCSes env) => RIO env ()
 report = do
   constraints <- readIORefFromLens constraintsL
   muses <- readIORefFromLens musesL
-  msses <- readIORefFromLens mssesL
   mcses <- readIORefFromLens mcsesL
   islands <- readIORefFromLens islandsL
-  let rpt = Report  constraints (map (map cstId) muses) (map (map cstId) mcses) islands
+  islandsMCSes <- readIORefFromLens islandsMcsesL
+  let rpt = Report  constraints (map (map cstId) muses) (map (map cstId) mcses) islands islandsMCSes
   let reportJson = encode rpt
   BS.putStr reportJson
 

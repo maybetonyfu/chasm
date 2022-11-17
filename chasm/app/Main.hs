@@ -34,6 +34,7 @@ main = do
         emptyMSSes <- newIORef []
         emptyMCSes <- newIORef []
         emptyIslands <- newIORef []
+        emptyIslandsMCSes <- newIORef []
         let chApp =
               ChasmApp
                 { chLogFunc = lf,
@@ -53,7 +54,8 @@ main = do
                   chMUSes = emptyMUSes,
                   chMSSes = emptyMSSes,
                   chMCSes = emptyMCSes,
-                  chIslands = emptyIslands
+                  chIslands = emptyIslands,
+                  chIslandsMCSes = emptyIslandsMCSes
                 }
         runRIO chApp plan
 

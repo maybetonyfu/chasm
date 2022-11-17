@@ -55,6 +55,9 @@ class HasMCSs a where
 class HasIslands a where
   islandsL :: Lens' a (IORef [[Int]])
 
+class HasIslandsMCSes a where
+  islandsMcsesL :: Lens' a (IORef [([[Int]], [[Int]])])
+
 readIORefFromLens :: Lens' env (IORef b) -> RIO env b
 readIORefFromLens l = do
   handle <- view l

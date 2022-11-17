@@ -87,7 +87,7 @@ marco = do
   let marcoMapSat = satisfiable (All marcoMap)
   if not marcoMapSat
     then do
-      logInfo "\nMarco map is no longer satisfiable. The search is over."
+      -- logInfo "\nMarco map is no longer satisfiable. The search is over."
       return ()
     else do
       seed <- getUnexplored
@@ -99,12 +99,14 @@ marco = do
 marcoMSS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMSSs env) => [Int] -> RIO env ()
 marcoMSS seed = do
   constraints <- readIORefFromLens constraintsL
-  mss <- fmap nub (grow constraints seed)
-  logInfo "\nFound MSS:"
-  logInfo . displayShow . map cstId $ mss
-
-  let inverseConstraints = filter (`notElem` mss) constraints
-  let inverseIds = map cstId inverseConstraints
+  mss <- grow constraints seed
+  -- logInfo "\nFound MSS:"
+  -- logInfo . displayShow . map cstId $ mss
+  let allConsIds = nub $ map cstId constraints
+  let mssIds = nub $ map cstId mss
+  let inverseIds = allConsIds \\ mssIds
+  -- let inverseConstraints = filter (`notElem` mss) constraints
+  -- let inverseIds = map cstId inverseConstraints
   let formula = Some (map Var inverseIds)
 
   marcoMapHandle <- view marcoMapL
@@ -117,8 +119,8 @@ marcoMUS :: (HasLogFunc env, HasConstraints env, HasMarcoMap env, HasMUSs env) =
 marcoMUS seed = do
   constraints <- readIORefFromLens constraintsL
   mus <- shrink constraints seed
-  logInfo "\nFound MUS:"
-  logInfo . displayShow . map cstId $ mus
+  -- logInfo "\nFound MUS:"
+  -- logInfo . displayShow . map cstId $ mus
 
   let ids = map cstId mus
   let formula = Some (map (Not . Var) ids)
